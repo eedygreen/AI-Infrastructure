@@ -1,0 +1,3 @@
+[submodule "Resources/fastbook"]
+	path = Resources/fastbook
+	url = https://github.com/fastai/fastbook.git
