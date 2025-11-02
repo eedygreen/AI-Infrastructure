@@ -1,0 +1,140 @@
+1
+00:00:01,229 --> 00:00:05,529
+In Python, you can create lists really quickly and
+
+2
+00:00:05,530 --> 00:00:09,910
+concisely with a cool tool called List Comprehensions.
+
+3
+00:00:09,910 --> 00:00:12,025
+In the cities example from earlier,
+
+4
+00:00:12,025 --> 00:00:17,469
+we created a list of capitalized cities from the cities list in a for loop.
+
+5
+00:00:17,469 --> 00:00:19,689
+With a list comprehension,
+
+6
+00:00:19,690 --> 00:00:22,580
+we can get the same result like this.
+
+7
+00:00:22,579 --> 00:00:28,570
+List comprehensions allow us to create a list using a for loop in one step.
+
+8
+00:00:28,570 --> 00:00:32,609
+You create a list comprehension with brackets including
+
+9
+00:00:32,609 --> 00:00:37,225
+an expression to evaluate for each element in an iterable.
+
+10
+00:00:37,225 --> 00:00:40,094
+This line called city.title for
+
+11
+00:00:40,094 --> 00:00:44,500
+each element in cities to create each element in the new list.
+
+12
+00:00:44,500 --> 00:00:50,825
+Notice this part looks just like the first line of a for loop without a colon,
+
+13
+00:00:50,825 --> 00:00:55,685
+and the action you want to take on each element is taking on the element here,
+
+14
+00:00:55,685 --> 00:00:58,155
+and append it to this new list.
+
+15
+00:00:58,155 --> 00:01:00,115
+In the list comprehension,
+
+16
+00:01:00,115 --> 00:01:01,750
+we don't need to create a new list
+
+17
+00:01:01,750 --> 00:01:05,844
+beforehand and append to it like we would in a for loop.
+
+18
+00:01:05,844 --> 00:01:09,670
+List comprehensions are not found in other languages,
+
+19
+00:01:09,670 --> 00:01:12,189
+but are very common in Python.
+
+20
+00:01:12,189 --> 00:01:18,314
+Here's another example that creates a list of squares from 0 to 64.
+
+21
+00:01:18,314 --> 00:01:23,094
+This line called X to the power of two for every element
+
+22
+00:01:23,094 --> 00:01:28,094
+in range nine to create each element in the new list, squares.
+
+23
+00:01:28,094 --> 00:01:32,135
+We can write this as a list comprehension like this.
+
+24
+00:01:32,135 --> 00:01:35,630
+Again, we are just looping through each element in
+
+25
+00:01:35,629 --> 00:01:41,659
+this iterable and evaluating this expression to get each new element in our list.
+
+26
+00:01:41,659 --> 00:01:45,450
+You can also add conditionals to list comprehensions.
+
+27
+00:01:45,450 --> 00:01:51,725
+After the iterable, you can use the If keyword to check a condition in each iteration.
+
+28
+00:01:51,724 --> 00:01:58,750
+In this example, X to the power of two is only evaluated if X is even.
+
+29
+00:01:58,750 --> 00:02:03,405
+This gives us a list only including squares of even numbers.
+
+30
+00:02:03,405 --> 00:02:05,689
+If you want to add an Else,
+
+31
+00:02:05,689 --> 00:02:08,569
+you will get a syntax error doing this.
+
+32
+00:02:08,569 --> 00:02:10,564
+If you'd like to add Else,
+
+33
+00:02:10,564 --> 00:02:13,189
+you have to move the conditionals to the beginning of
+
+34
+00:02:13,189 --> 00:02:17,858
+the list comprehension right after the expression like this.
+
+35
+00:02:17,858 --> 00:02:21,000
+Details on why this is the case are in the notes below.
+
