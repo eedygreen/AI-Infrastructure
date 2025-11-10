@@ -1,0 +1,43 @@
+Questions regarding Uploaded Image Classification:
+
+1. Did the three model architectures classify the breed of dog in Dog_01.jpg to be the same breed? 
+If not, report the differences in the classifications.
+
+Answer: 
+The three model architectures classified the bread correctly as German shepherd
+Classifier: german shepherd, german shepherd dog, german police dog, alsatian
+
+2. Did each of the three model architectures classify the breed of dog in Dog_01.jpg to be the same breed of dog as that model architecture classified Dog_02.jpg? 
+If not, report the differences in the classifications.
+
+Answer: 
+No, the three model architectures classified the breed in Dog_02.jpg image differently and as follows
+
+RESNET: 
+Dog_02.jpg: 
+Real:                        dog   Classifier:              brabancon griffon
+
+VGG:
+Dog_02.jpg: 
+Real:                        dog   Classifier:              brabancon griffon
+
+ALEXNET: 
+Dog_02.jpg: 
+Real:                        dog   Classifier:      vizsla, hungarian pointer 
+
+
+3. Did the three model architectures correctly classify Animal_Name_01.jpg and Object_Name_01.jpg to not be dogs? If not, report the misclassifications.
+
+Answer: Yes, all three model classify the Chicken_01.jpg correclty as hen
+
+
+
+4. Based upon your answers for questions 1. - 3. above, select the model architecture that you feel did the best at classifying the four uploaded images. 
+Describe why you selected that model architecture as the best on uploaded image classification.
+
+Answer:
+VGG model Architecture did best in classifying the four images as it is the only model that comes close to
+classify the fourth image Books_01.jpg as envelope. RESNET was photocopier, and ALEXNET was hair slide. 
+Comparing the three, an envelope is a closed match to a Book than an Electronic Machine and Hair Slide. 
+Furthermore, all models classify wrongly on the inverted image, but VGG and RESNET classified it as brabancon griffon
+that bears no physical resemblance, but, it is also an hairy dog as the Real image, German shepherd. 
