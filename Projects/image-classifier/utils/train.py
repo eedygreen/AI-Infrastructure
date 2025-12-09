@@ -1,21 +1,29 @@
-import typer
+from typing import Optional
 from rich.console import Console
-from utils.model_setup import setup_model_data
-from utils.validation import run_validation
+from config import setup_model_data, LossFunction
+from utils import run_validation
 
 console = Console()
 
-def train(
-    ctx: typer.Context,
-    epochs: int,
-    learning_rate: float,
-    print_every: int,
-    model,
-    dataloaders,
-    test_dataloaders,
-    criterion,
-    optimizer,
-    device
+def train_model(
+        data_dir: str,
+        arch: str,
+        weights: str,
+        learning_rate: float,
+        epochs: int,
+        print_every: int,
+        input_size: int,
+        output_size: int,
+        hidden_size: int,
+        min_hidden_size: int,
+        pretrained: Optional[bool] = False,
+        use_batch_norm: Optional[bool] = False,
+        dropout: Optional[float] = 0.5,
+        gpu: Optional[bool] = False,
+        shuffle: Optional[bool] = True,
+        criterion: Optional[LossFunction] = LossFunction.NLL,
+        batch_size: Optional[int] = 32,
+        save_dir: Optional[str] = None
 ):
     """
     Train the neural network model.
@@ -25,15 +33,28 @@ def train(
         python -m cli train --arch <architecture> --epochs <epochs>  --criterion <criterion> --print_every <print_every>
  
     """
-    epochs = ctx.obj["epochs"]
-    print_every = ctx.obj["print_every"]
-
     console.log("Setting up model and data loaders ...")
 
-    model, dataloaders, _, test_dataloaders, criterion, optimizer, device, _ = setup_model_data(ctx)
+    model, dataloaders, _, test_dataloaders, criterion, optimizer, device = setup_model_data(
+        data_dir=data_dir,
+        arch=arch,
+        weights=weights,
+        learning_rate=learning_rate,
+        input_size=input_size,
+        output_size=output_size,
+        hidden_size=hidden_size,
+        min_hidden_size=min_hidden_size,
+        pretrained=pretrained,
+        use_batch_norm=use_batch_norm,
+        dropout=dropout,
+        gpu=gpu,
+        shuffle=shuffle,
+        criterion=criterion,
+        batch_size=batch_size
+    )
 
     console.log(f"Starting training on device: {device}")
-    console.log(f"Training for {epochs} epochs with learning rate {ctx.obj["learning_rate"]}")
+    console.log(f"Training for {epochs} epochs with learning rate {learning_rate}")
 
     running_loss = 0
     step = 0
@@ -69,3 +90,6 @@ def train(
                 model.train()
 
     console.log("Training completed.")
+    if save_dir:
+        console.log("Saving checkpoint...")
+        model.classifier.save_checkpoint(save_dir=save_dir, epoch=epochs, optimizer=optimizer)
