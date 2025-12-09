@@ -1,0 +1,4 @@
+scikit-learn
+torchvision
+torch
+Pillow
