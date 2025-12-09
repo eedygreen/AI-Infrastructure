@@ -1,0 +1,15 @@
+*.pyc
+*.pth
+*.json
+__pycache__/
+env/
+venv/
+.idea/
+.vscode/
+.DS_Store
+logs/
+*.log
+checkpoints/
+results/
+saves/
+flowers/
