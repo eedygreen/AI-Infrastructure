@@ -22,8 +22,8 @@ def run_validation(
 
     test_loss = 0
     accuracy = 0
-    
-    console.log("Starting validation ...")
+
+    console.log("Running validation ...")
 
     model.eval()
     with torch.no_grad():
