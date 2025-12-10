@@ -99,7 +99,7 @@ class RandomHorizontalFlip:
 
    def __call__(self, img: Image.Image) -> Image.Image:
       if random.random() < self.p:
-         return Image.mirror(img)
+         return Image.transpose(method=Image.Transpose.FLIP_LEFT_RIGHT(img))
       return img
    
 class Resize:
