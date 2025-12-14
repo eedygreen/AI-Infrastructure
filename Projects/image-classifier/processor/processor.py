@@ -99,7 +99,7 @@ class RandomHorizontalFlip:
 
    def __call__(self, img: Image.Image) -> Image.Image:
       if random.random() < self.p:
-         return Image.mirror(img)
+         return Image.transpose(method=Image.Transpose.FLIP_LEFT_RIGHT(img))
       return img
    
 class Resize:
@@ -118,10 +118,10 @@ class Resize:
 
       if width < height:
          new_width = self.size
-         new_height = int(self.size * height / width)
+         new_height = int(self.size * (height / width))
       else:
          new_height = self.size
-         new_width = int(self.size * width / height)
+         new_width = int(self.size * (width / height))
       return img.resize((new_width, new_height), Image.BILINEAR)
    
 class CenterCrop:
