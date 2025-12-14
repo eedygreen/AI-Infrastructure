@@ -1,6 +1,5 @@
 
 import os, typer
-
 from rich.console import Console
 from middleware import Classifier
 from typing_extensions import Annotated
