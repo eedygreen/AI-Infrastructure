@@ -10,70 +10,70 @@ from rich.console import Console
 from processor import Compose, Resize, CenterCrop, ToTensor, Normalize
 
 console = Console()
-# class PredictionResult:
-#     """
-#         Class to hold prediction results
-#     """
-#     def __init__(
-#         self, 
-#         image_path: str,
-#         top_classes: List[str],
-#         top_probs: List[float],
-#         true_label: Optional[str]=None
-#     ):
-#         self.image_path = image_path
-#         self.top_classes = top_classes
-#         self.top_probs = top_probs
-#         self.true_label = true_label
+class PredictionResult:
+    """
+        Class to hold prediction results
+    """
+    def __init__(
+        self, 
+        image_path: str,
+        top_classes: List[str],
+        top_probs: List[float],
+        true_label: Optional[str]=None
+    ):
+        self.image_path = image_path
+        self.top_classes = top_classes
+        self.top_probs = top_probs
+        self.true_label = true_label
 
-#     def is_correct(self, rank: int = 1) -> bool:
-#         """
-#             Check if the top predicted class matches the true label
+    def is_correct(self, rank: int = 1) -> bool:
+        """
+            Check if the top predicted class matches the true label
 
-#             Args:
-#                 rank: Rank of prediction to check 
+            Args:
+                rank: Rank of prediction to check 
 
-#             Returns:
-#                 True if correct, False if incorrect, None if true_label is not set
-#         """
-#         if self.true_label is None:
-#             raise ValueError("Cannot predict result without true_label.")
+            Returns:
+                True if correct, False if incorrect, None if true_label is not set
+        """
+        if self.true_label is None:
+            raise ValueError("Cannot predict result without true_label.")
 
-#         return self.true_label in self.top_classes[:rank]
+        return self.true_label in self.top_classes[:rank]
     
-#     def top1_match(self) -> bool:
-#         """
-#             Check if the top predicted class matches the true label
+    def top1_match(self) -> bool:
+        """
+            Check if the top predicted class matches the true label
 
-#             Returns:
-#                 True if correct, False if incorrect
-#         """
-#         return self.is_correct(rank=1)
+            Returns:
+                True if correct, False if incorrect
+        """
+        return self.is_correct(rank=1)
     
-#     def topk_match(self, k: int) -> bool:
-#         """
-#             Check if the true label is within the top-k predicted classes
+    def topk_match(self, k: int) -> bool:
+        """
+            Check if the true label is within the top-k predicted classes
 
-#             Returns:
-#                 True if correct, False if incorrect
-#         """
-#         return self.is_correct(rank=k)
+            Returns:
+                True if correct, False if incorrect
+        """
+        return self.is_correct(rank=k)
         
 
-#     def __repr__(self) -> str:
-#         result = f"PredictionResult(image={Path(self.image_path).name})"
-#         result += f"Top Prediction: top_classes={self.top_classes}, top_probs={self.top_probs}, true_label={self.true_label})"
+    def __repr__(self) -> str:
+        result = f"PredictionResult(image={Path(self.image_path).name})"
+        result += f"Top Prediction: top_classes={self.top_classes}, top_probs={self.top_probs}, true_label={self.true_label})"
 
-#         if self.true_label:
-#             match_status = "✓ CORRECT" if self.top1_match() else "✗ INCORRECT"
-#             result += f" True label: {self.true_label} [{match_status}]"
+        if self.true_label:
+            match_status = "✓ CORRECT" if self.top1_match() else "✗ INCORRECT"
+            result += f" True label: {self.true_label} [{match_status}]"
 
-#             result += f" Top-{len(self.top_classes)} prediction: \n"
-#             for cls, prob in zip(self.top_classes, self.top_probs):
-#                 is_match = "✓" if cls == self.true_label else "✗"
-#                 result += f"  {is_match}  Class: {cls}, Probability: {prob:.4f}\n"
+            result += f" Top-{len(self.top_classes)} prediction: \n"
+            for cls, prob in zip(self.top_classes, self.top_probs):
+                is_match = "✓" if cls == self.true_label else "✗"
+                result += f"  {is_match}  Class: {cls}, Probability: {prob:.4f}\n"
 
-#         return result
+        return result
 
 def run_predict(
     image_path: Union[str, List[str]], 
