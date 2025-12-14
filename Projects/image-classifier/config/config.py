@@ -1,10 +1,9 @@
 import os
-import torch, typer
+import torch
 from typing import Optional
 from enum import Enum
 from torch import optim, nn
 from middleware import Classifier
-from typing_extensions import Annotated
 from torchvision import datasets, transforms, models
 
 class LossFunction(str, Enum):
@@ -67,7 +66,9 @@ def get_data_loaders(
     test_dataloaders = torch.utils.data.DataLoader(test_image_datasets, batch_size=batch_size, shuffle=shuffle)
     valid_dataloaders = torch.utils.data.DataLoader(valid_image_datasets, batch_size=batch_size, shuffle=shuffle)
 
-    return train_dataloaders, valid_dataloaders, test_dataloaders
+    class_to_idx = train_image_datasets.class_to_idx #
+    
+    return train_dataloaders, valid_dataloaders, test_dataloaders, class_to_idx
 
 def get_model(
         model_name: str,
@@ -115,7 +116,7 @@ def setup_model_data(
     if not os.path.exists(data_dir):
         raise FileNotFoundError(f"Data directory does not exist: {data_dir}")
 
-    train_dataloaders, valid_dataloaders, test_dataloaders = get_data_loaders(data_dir=data_dir, batch_size=batch_size, shuffle=shuffle)
+    train_dataloaders, valid_dataloaders, test_dataloaders, class_to_idx = get_data_loaders(data_dir=data_dir, batch_size=batch_size, shuffle=shuffle)
 
     model = get_model(model_name=arch, weights=weights, pretrained=pretrained)
 
@@ -145,4 +146,13 @@ def setup_model_data(
     device = torch.device(gpu if torch.cuda.is_available() else "cpu")
     model.to(device)
 
-    return model, train_dataloaders, valid_dataloaders, test_dataloaders, criterion, optimizer, device
+    # results = {
+    #     'model': model, 
+    #     'train_dataloaders': train_dataloaders, 
+    #     'valid_dataloaders': valid_dataloaders, 
+    #     'test_dataloaders': test_dataloaders, 
+    #     'criterion': criterion, 
+    #     'optimizer': optimizer, 
+    #     'device': device
+    # }
+    return model, train_dataloaders, valid_dataloaders, test_dataloaders, criterion, optimizer, device, class_to_idx
