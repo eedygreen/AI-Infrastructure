@@ -2,12 +2,11 @@
 import os
 import torch
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 from rich.console import Console
 from middleware import Classifier
 
 console = Console()
-
 class Checkpoint(Classifier):
     """
         Checkpoint class that extends Classifier with save/load functionality.
@@ -23,7 +22,7 @@ class Checkpoint(Classifier):
         use_batch_norm: bool = True,
         dropout: float = 0.3,
         optimizer: Optional[torch.optim.Optimizer] = None,
-        train_dataloader: Optional[torch.utils.data.DataLoader] = None
+        class_to_idx: Optional[Dict[str, int]] = None
     ):
         """
             Initialize Checkpoint with all necessary parameters.
@@ -36,7 +35,7 @@ class Checkpoint(Classifier):
             dropout_rate: Dropout probability
             use_batch_norm: Whether to use batch normalization
             optimizer: The optimizer used for training
-            train_dataloader: Training Dataloader (extract class_to_idx from dataset)
+            class_to_idx: Classes mapping from indices
         """
         super().__init__(
             input_size = input_size,
@@ -48,13 +47,9 @@ class Checkpoint(Classifier):
         )
 
         self.optimizer = optimizer
+        self.class_to_idx = class_to_idx if class_to_idx is not None else {}
 
-        if train_dataloader is not None:
-            self.class_to_idx = train_dataloader.dataset.class_to_idx
-        else:
-            self.class_to_idx = {}
-
-    def save_checkpoint(self, save_dir: str, epoch: Optional[int]=None) -> None:
+    def save_checkpoint(self, save_dir: str, class_to_idx: Optional[Dict[str, int]], epoch: Optional[int]=None) -> None:
         """
         Save the trained model as checkpoint.pth file.
 
@@ -67,6 +62,8 @@ class Checkpoint(Classifier):
         """
         os.makedirs(save_dir, exist_ok=True)
 
+        mapping = class_to_idx if class_to_idx is not None else self.class_to_idx
+        
         checkpoint = {
             'input_size': self.input_size,
             'output_size': self.output_size,
@@ -75,8 +72,11 @@ class Checkpoint(Classifier):
             'use_batch_norm': self.use_batch_norm,
             'dropout': self.dropout,
             'state_dict': self.state_dict(),
-            'class_to_idx': self.class_to_idx
+            'class_to_idx': mapping
         }
+
+        if checkpoint['class_to_idx'] is None:
+            console.log(f"empty class_to_idx: {checkpoint['class_to_idx']}")
 
         if self.optimizer is not None:
             checkpoint['optimizer'] = self.optimizer.state_dict()
@@ -85,9 +85,11 @@ class Checkpoint(Classifier):
             checkpoint['epoch'] = epoch
 
         save_path = os.path.join(save_dir, 'checkpoint.pth')
-        console.log("Saving checkpoint...")
+        
         torch.save(checkpoint, save_path)
-        console.print(f"[green]✓[/green] Checkpoint saved to: {save_path}")
+
+        console.log(f"[yellow]Saving with {len(mapping)} class mappings[/yellow]")
+        console.log(f"[green]✓[/green] Checkpoint saved to: {save_path}")
 
     @classmethod
     def load_checkpoint(cls, file_path: str, gpu: Optional[bool]):
@@ -111,10 +113,10 @@ class Checkpoint(Classifier):
         if not file_path.exists():
             raise FileNotFoundError(f"Checkpoint file not found: {file_path}")
         
-        console.print(f"[blue]Loading checkpoint from:[/blue] {file_path}")
+        console.log(f"[blue]Loading checkpoint from:[/blue] {file_path}")
 
-        checkpoint_data = torch.load(file_path, map_location=device)
-    
+        checkpoint_data = torch.load(file_path, encoding='ascii', map_location=device)
+
         model = cls(
             input_size = checkpoint_data['input_size'],
             output_size = checkpoint_data['output_size'],
@@ -126,16 +128,14 @@ class Checkpoint(Classifier):
 
         model.load_state_dict(checkpoint_data['state_dict'])
 
-        model.class_to_idx = checkpoint_data.get('class_to_idx', {})
-
         model.to(device)
 
-        console.print(f"[green]✓[/green] Model loaded successfully")
-        console.print(f" Device: {device}")
-        console.print(f"Architecture: {model.get_architecture_summary()}")
+        console.log(f"[green]✓[/green] Model loaded successfully")
+        console.log(f" Device: {device}")
+        console.log(f"Architecture: {model.get_architecture_summary()}")
 
         if 'optimizer_state' in checkpoint_data:
-            console.print("[yellow]Note[/yellow] Optimizer state available in checkpoint")
+            console.log("[yellow]Note[/yellow] Optimizer state available in checkpoint")
         
         return model
     
