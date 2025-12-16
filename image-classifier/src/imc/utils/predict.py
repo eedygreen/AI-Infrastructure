@@ -8,6 +8,7 @@ from imc.utils import Checkpoint
 from torchvision import models
 from rich.console import Console
 from imc.processor import Compose, Resize, CenterCrop, ToTensor, Normalize
+import matplotlib.pyplot as plt
 
 console = Console()
 class PredictionResult:
@@ -83,6 +84,8 @@ def run_predict(
     checkpoint_path: str,
     gpu: Optional[bool], 
     topk=5,
+    show_plot: Optional[bool]= True,
+    save_plot: Optional[str] = None,
     category_names: Optional[str]=None,
     class_to_idx: Optional[Dict[str, int]] = None
     ) -> Union[PredictionResult, List[PredictionResult]]:
@@ -140,6 +143,17 @@ def run_predict(
         results.append(result)
         console.print(result)
 
+    if show_plot or save_plot:
+        if len(results) == 1:
+            console.print("[blue]Displaying prediction visualization...")
+            plot_predict(results[0], save_path=save_plot)
+            if show_plot:
+                plt.show()
+        else:
+            console.print(f"[blue]Displaying batch predictions for {len(results)} images...")
+            plot_batch_predict(results, max_display=min(9, len(results)), save_path=save_plot)
+            if show_plot:
+                plt.show()
 
     return results[0] if len(results) == 1 else results
 
@@ -244,7 +258,9 @@ def batch_predict(
     gpu: Optional[bool],
     topk=5,
     category_names: Optional[str]=None,
-    class_to_idx: Optional[Dict[str, int]]=None
+    class_to_idx: Optional[Dict[str, int]]=None,
+    show_plot: Optional[bool] = True,
+    save_plot: Optional[str] = None
 ) -> Dict:
     """
         Predict the classes of multiple images using a trained deep learning model.
@@ -276,7 +292,9 @@ def batch_predict(
         gpu=gpu,
         topk=topk,
         category_names=category_names,
-        class_to_idx=class_to_idx
+        class_to_idx=class_to_idx,
+        show_plot=show_plot,
+        save_plot=save_plot
     )
 
     if not isinstance(results, list):
@@ -297,3 +315,155 @@ def batch_predict(
     console.print(f"Top-1 Accuracy: {metrics['top1_accuracy']:.2f}%")
     console.print(f"Top-{topk} Accuracy: {metrics['topk_accuracy']:.2f}%")
     return metrics
+
+def plot_predict(
+    result: PredictionResult,
+    figsize: tuple = (12, 6),
+    save_path: Optional[str] = None
+) -> None:
+    """
+    Plot the image with a bar graph of top-k predictions.
+    
+    Args:
+        result: PredictionResult object containing predictions
+        figsize: Figure size (width, height)
+        save_path: Optional path to save the figure
+        
+    Usage:
+        result = run_predict('image.jpg', 'model.pth', gpu=True, topk=5)
+        plot_prediction(result)
+        plt.show()
+    """
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    
+
+    img = Image.open(result.image_path)
+    ax1.imshow(img)
+    ax1.axis('off')
+    ax1.set_title(f"Image: {Path(result.image_path).name}", fontsize=12, fontweight='bold')
+    
+ 
+    classes = result.top_classes
+    probs = [p * 100 for p in result.top_probs]  # Convert to percentages
+    
+
+    y_pos = np.arange(len(classes))
+    bars = ax2.barh(y_pos, probs, color='steelblue', alpha=0.8)
+    
+    # Highlight the top prediction
+    bars[0].set_color('darkgreen')
+    bars[0].set_alpha(1.0)
+    
+    if result.true_label:
+        for i, cls in enumerate(classes):
+            if cls == result.true_label:
+                bars[i].set_color('green' if i == 0 else 'orange')
+                bars[i].set_alpha(1.0)
+    
+    ax2.set_yticks(y_pos)
+    ax2.set_yticklabels(classes)
+    ax2.invert_yaxis()  # Top prediction at the top
+    ax2.set_xlabel('Probability (%)', fontsize=11)
+    ax2.set_title('Top-K Predictions', fontsize=12, fontweight='bold')
+    ax2.set_xlim(0, max(probs) * 1.1)  # padding
+    
+    # Add percentage labels on bars
+    for i, (bar, prob) in enumerate(zip(bars, probs)):
+        width = bar.get_width()
+        ax2.text(width + 0.5, bar.get_y() + bar.get_height()/2, 
+                f'{prob:.2f}%', 
+                ha='left', va='center', fontsize=9)
+    
+    if result.true_label:
+        status = "✓ CORRECT" if result.top1_match() else "✗ INCORRECT"
+        color = "green" if result.top1_match() else "red"
+        fig.suptitle(f"True Label: {result.true_label} [{status}]", 
+                    fontsize=13, fontweight='bold', color=color, y=0.98)
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        console.print(f"[green]Saved plot to {save_path}")
+    
+    return fig
+
+def plot_batch_predict(
+    results: List[PredictionResult],
+    max_display: int = 6,
+    figsize: tuple = (15, 10),
+    save_path: Optional[str] = None
+) -> None:
+    """
+    Plot multiple predictions in a grid layout.
+    
+    Args:
+        results: List of PredictionResult objects
+        max_display: Maximum number of images to display
+        figsize: Figure size (width, height)
+        save_path: Optional path to save the figure
+        
+    Usage:
+        results = run_predict(['img1.jpg', 'img2.jpg'], 'model.pth', gpu=True, topk=5)
+        plot_batch_predictions(results)
+        plt.show()
+    """
+
+    results = results[:max_display]
+    n_images = len(results)
+    
+    n_cols = min(3, n_images)
+    n_rows = (n_images + n_cols - 1) // n_cols
+    
+    fig = plt.figure(figsize=figsize)
+    
+    for idx, result in enumerate(results):
+        ax_img = plt.subplot(n_rows, n_cols * 2, idx * 2 + 1)
+        img = Image.open(result.image_path)
+        ax_img.imshow(img)
+        ax_img.axis('off')
+        
+        if result.true_label:
+            status = "✓" if result.top1_match() else "✗"
+            color = "green" if result.top1_match() else "red"
+            ax_img.set_title(f"{status} {Path(result.image_path).name}", 
+                           fontsize=10, color=color, fontweight='bold')
+        else:
+            ax_img.set_title(Path(result.image_path).name, fontsize=10)
+        
+        ax_bar = plt.subplot(n_rows, n_cols * 2, idx * 2 + 2)
+        
+        classes = result.top_classes
+        probs = [p * 100 for p in result.top_probs]
+        
+        y_pos = np.arange(len(classes))
+        bars = ax_bar.barh(y_pos, probs, color='steelblue', alpha=0.7)
+
+        bars[0].set_color('darkgreen')
+        bars[0].set_alpha(1.0)
+        
+        if result.true_label:
+            for i, cls in enumerate(classes):
+                if cls == result.true_label:
+                    bars[i].set_color('green' if i == 0 else 'orange')
+        
+        ax_bar.set_yticks(y_pos)
+        ax_bar.set_yticklabels(classes, fontsize=8)
+        ax_bar.invert_yaxis()
+        ax_bar.set_xlabel('Prob (%)', fontsize=9)
+        ax_bar.set_xlim(0, max(probs) * 1.15)
+        
+        for bar, prob in zip(bars, probs):
+            width = bar.get_width()
+            ax_bar.text(width + 0.3, bar.get_y() + bar.get_height()/2, 
+                       f'{prob:.1f}%', ha='left', va='center', fontsize=7)
+    
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        console.print(f"[green]Saved batch plot to {save_path}")
+    
+    return fig
+

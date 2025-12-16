@@ -21,7 +21,7 @@ for conda users
 
 
 ## Usage
-python -m -help see [here]()
+python -m --help
 
 [#Optional]
 Installation
@@ -30,7 +30,7 @@ cd image-classifier
 pip install -e .
 
 ```
-
+With installation
 ```
 imc
                                                                                                                         
@@ -114,10 +114,11 @@ python -m imc --help
 ## Sub Commands Usage
 
 ### Predict
+
 ```
-python -m imc predict --help
+imc predict --help
                                                                                                                         
- Usage: python -m imc predict [OPTIONS]                                                                                 
+ Usage: imc predict [OPTIONS]                                                                                           
                                                                                                                         
  Predict the class (or classes) of an image using a trained deep learning model.                                        
  Usage:                                                                                                                 
@@ -131,6 +132,8 @@ python -m imc predict --help
 │ --topk         -k         Number of top most likely classes to return [default: 5]                                   │
 │ --label-names  -l         Path to JSON file mapping labels to real names [default: None]                             │
 │ --gpu          -gp        Enable GPU Device for Faster inference. Default is False (Disable)                         │
+│ --save-plot    -sp        Path to save the plot(s) [default: None]                                                   │
+│ --show-plot    -dp        Display plot visualization of Top-k predictions [default: True]                            │
 │ --help         -h         Show this message and exit.                                                                │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
