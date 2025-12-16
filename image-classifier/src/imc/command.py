@@ -503,7 +503,21 @@ def predict(
             "-gp",
             metavar="",
             help="Enable GPU Device for Faster inference. Default is False (Disable)"
-        )    ] = False
+        )    ] = False,
+    save_plot: Annotated[str,
+        typer.Option(
+            "--save-plot",
+            "-sp",
+            metavar="",
+            help="Path to save the plot(s)"
+        )] = None,
+    show_plot: Annotated[bool,
+        typer.Option(
+            "--show-plot",
+            "-dp",
+            metavar="",
+            help="Display plot visualization of Top-k predictions"
+        )] = True
 ):
     """Predict the class (or classes) of an image using a trained deep learning model.
 
@@ -518,6 +532,8 @@ def predict(
     ctx.obj["topk"] = topk
     ctx.obj["label_names"] = label_names
     ctx.obj["gpu"] = gpu
+    ctx.obj["show_plot"] = show_plot
+    ctx.obj["save_plot"] = save_plot
     
     batch_predict(
         image_path=ctx.obj["image_dir"],
@@ -525,5 +541,7 @@ def predict(
         gpu=ctx.obj["gpu"],
         topk=ctx.obj["topk"],   
         category_names=ctx.obj["label_names"],
-        class_to_idx=ctx.obj["class_to_idx"]
+        class_to_idx=ctx.obj["class_to_idx"],
+        show_plot=ctx.obj["show_plot"], 
+        save_plot=ctx.obj["save_plot"]
     )
