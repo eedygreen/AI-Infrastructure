@@ -1,4 +1,4 @@
-name: image
+name: imc
 channels:
   - conda-forge
   - defaults
