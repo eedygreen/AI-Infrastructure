@@ -286,8 +286,13 @@ def batch_predict(
 
     console.print(f"Found {len(image_paths)} images for prediction in {path}.")
 
+    if path.is_file():
+        image_path = str(path)
+    else:
+        image_path = [str(p) for p in image_paths]
+        
     results = run_predict(
-        image_path=[str(p) for p in image_paths],
+        image_path=image_path,
         checkpoint_path=checkpoint_path,
         gpu=gpu,
         topk=topk,
