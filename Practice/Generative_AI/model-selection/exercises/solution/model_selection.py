@@ -11,6 +11,12 @@ from typing import Dict, List, Tuple
 from datetime import datetime
 import numpy as np
 
+try:
+    api_key = os.getenv("OPENAI_API_KEY")
+    print("API_KEY Loaded Successfully!")
+except Exception as e:
+    print(f"Error loading API_KEY: {e}")
+
 # Configuration dictionary defining different model setups for specific use cases
 # Each configuration is optimized for different types of tasks
 MODEL_CONFIGS = {
@@ -93,7 +99,7 @@ def call_openai_api(prompt: str, config: Dict) -> Dict:
         # Note: In production, use environment variables for API keys
         client = OpenAI(
             base_url="https://openai.vocareum.com/v1",
-            api_key="voc-1731846060126677132371766c7b06ddc2849.94786379"
+            api_key=api_key
         )
         
         # Make the API call with specified configuration
