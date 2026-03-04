@@ -234,7 +234,7 @@ def load_evaluation_dataset(filepath: str) -> list[dict]:
     path = Path(filepath)
 
     if not path.exists():
-        logger.error(f"Dataset file not found: {filepath}")
+        logger.error(f"Dataset file not found: {filepath}", exc_info=True)
         return []
     
     suffix = path.suffix.lower()
@@ -253,7 +253,7 @@ def load_evaluation_dataset(filepath: str) -> list[dict]:
                     if line.strip() and not line.startswith("#")
                 ]
         else:
-            logger.error(f"Unsupported file format: '{suffix}'. Use .json or .txt/.jsonl")
+            logger.error(f"Unsupported file format: '{suffix}'. Use .json or .txt/.jsonl", exc_info=True)
             return []
 
     except (json.JSONDecodeError, OSError) as e:

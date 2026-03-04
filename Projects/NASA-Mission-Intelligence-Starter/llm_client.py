@@ -54,7 +54,7 @@ def generate_response(openai_key: str, user_message: str, context: str,
     if response:
         logger.info("[generate_response] Successfully Generated Response")
     else:
-        logger.error("[generate_response] Return empty reponse")
+        logger.error("[generate_response] Return empty reponse", exc_info=True)
 
     answer = response.choices[0].message.content
 
