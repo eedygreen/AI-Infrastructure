@@ -53,7 +53,7 @@ def discover_chroma_backends() -> Dict[str, Dict[str, str]]:
                     
                 except Exception as e:
                     info["count"] = 0
-                    logger.error(f"Error storing collection count: {type(e).__name__}")
+                    logger.error(f"[rag_client] Error storing collection count: {type(e).__name__}")
                     
                 # Add collection information to backends dictionary                
                 backends[key]=info
@@ -71,6 +71,7 @@ def discover_chroma_backends() -> Dict[str, Dict[str, str]]:
                 "count": "0",                           # Set appropriate fallback values for missing information
                 "error": err_msg,
             }
+            logger.error(f"[rag_client]: {e}")
 
     # Return complete backends dictionary with all discovered collections
     return backends
@@ -95,10 +96,10 @@ def initialize_rag_system(chroma_dir: str, collection_name: str):
         logger.info(f"✓ Successfully initialized collection: {collection_name}")
         return collection  # Return the collection with the collection_name
     except FileNotFoundError as e:
-        logger.error(f"Error: Database directory not found at {chroma_dir}")
+        logger.error(f"[rag_client] Error: Database directory not found at {chroma_dir}")
         return collection
     except Exception as e:
-        logger.error(f"Error connecting to DB: {e}[")
+        logger.error(f"[rag_client] Error connecting to DB: {e}[")
         return None
     
 
@@ -146,13 +147,13 @@ def retrieve_documents(collection, query: str, n_results: int = 3,
         )
 
         if not results:
-            logger.warning(f"Empty query returned")
+            logger.warning(f"[rag_client] Empty query returned")
 
-        logger.info(f"Query return results")  
+        logger.info(f"[rag_client] Query return results")  
         return results                              # Return query results to caller
             
     except Exception as e:
-        logger.error(f"Error retreiving documents: {e}", exc_info=True)
+        logger.error(f"[rag_client] Error retreiving documents: {e}", exc_info=True)
         return None
 
 def format_context(documents: List[str], metadatas: List[Dict]) -> str:

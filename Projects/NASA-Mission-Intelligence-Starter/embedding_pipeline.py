@@ -78,7 +78,7 @@ class ChromaEmbeddingPipelineTextOnly:
                 )
             logger.info(f"Successfully retrieved API Key")
         except Exception as e:
-            logger.error(f"Error retrieving API Key: {e}")
+            logger.error(f"Error retrieving API Key: {e}", exc_info=True)
 
         # Store configuration parameters
         self.chroma_persist_directory = chroma_persist_directory
@@ -142,7 +142,7 @@ class ChromaEmbeddingPipelineTextOnly:
                 raise TypeError(f"metadata must be dict, got {type(metadata).__name__}")
         
         except (TypeError, ValueError) as e:
-            logger.error(f"Input Validation failed: {e}")
+            logger.error(f"Input Validation failed: {e}", exc_info=True)
             raise
         
         if not text.strip():
@@ -168,7 +168,7 @@ class ChromaEmbeddingPipelineTextOnly:
                 return result
             except Exception as e:
                 logger.error(f"Error creating single chunk: {e}")
-                raise ChunkingError(f"Failed to create Single Chunk: {e}")
+                raise ChunkingError(f"Failed to create Single Chunk: {e}", exc_info=True)
         
         # chunking logic with overlap
         try: 
@@ -181,7 +181,7 @@ class ChromaEmbeddingPipelineTextOnly:
                     separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""] # break at sentence boundaries
                 )
             except Exception as e:
-                logger.error(f"Failed to initialize splitter: {e}")
+                logger.error(f"Failed to initialize splitter: {e}", exc_info=True)
                 raise ChunkingError(f"Failed to create splitter: {e}")
             
             try:
@@ -191,7 +191,7 @@ class ChromaEmbeddingPipelineTextOnly:
                 ) 
             except Exception as e:
                 logger.error(f"create_documents failed: {e}")
-                raise ChunkingError(f"Failed to create documents: {e}")
+                raise ChunkingError(f"Failed to create documents: {e}", exc_info=True)
 
             if not documents:
                 raise ChunkingError("No documents were created")
@@ -213,11 +213,11 @@ class ChromaEmbeddingPipelineTextOnly:
                     result.append((chunk_text, chunk_metadata))
 
                 except AttributeError as e:
-                    logger.error(f"Document {i} missing expected atrributes: {e}")
+                    logger.error(f"Document {i} missing expected atrributes: {e}", exc_info=True)
                     continue
 
                 except Exception as e:
-                    logger.error(f"Error processing document {i}: {e}")
+                    logger.error(f"Error processing document {i}: {e}", exc_info=True)
                     continue
 
             if not result:
@@ -922,11 +922,11 @@ class ChromaEmbeddingPipelineTextOnly:
             if not result:
                 raise RuntimeError(f"Query returned empty")
             
-            logger.debug(f"Query returned - {len(result.keys())} items")
+            logger.info(f"Query returned - {len(result.keys())} items")
             return result
         
         except Exception as e:
-            logger.error(f"Query failed: {e}")
+            logger.error(f"Query failed: {e}", exc_info=True)
             raise   
     
     def get_collection_stats(self) -> Dict[str, Any]:
@@ -968,7 +968,7 @@ class ChromaEmbeddingPipelineTextOnly:
             return stats
             
         except Exception as e:
-            logger.error(f"Error getting collection stats: {e}")
+            logger.error(f"Error getting collection stats: {e}", exc_info=True)
             return {'error': str(e)}
 
 def main():
