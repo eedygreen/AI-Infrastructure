@@ -1,0 +1,82 @@
+
+{
+  "questions": [
+    {
+      "category": "overview",
+      "question": "What was the primary objective of the Apollo 11 mission, and who were the crew members?",
+      "contexts": [
+        "Apollo 11 was the spaceflight that first landed humans on the Moon. Commander Neil Armstrong and Lunar Module Pilot Buzz Aldrin landed the Apollo Lunar Module Eagle on July 20, 1969, while Command Module Pilot Michael Collins orbited in the Command Module Columbia.",
+        "President John F. Kennedy had established the national goal of landing on the Moon before the end of the 1960s in a 1961 address to Congress. Apollo 11 fulfilled this objective when Armstrong and Aldrin touched down on the Sea of Tranquility at 20:17 UTC on July 20, 1969.",
+        "Neil Armstrong became the first person to step onto the lunar surface on July 21, 1969, at 02:56 UTC. Buzz Aldrin joined him approximately 20 minutes later. The two astronauts spent about two and a quarter hours together outside the spacecraft collecting samples and planting the U.S. flag."
+      ],
+      "answer": "The primary objective of Apollo 11 was to complete a crewed lunar landing and return safely to Earth, fulfilling President Kennedy's 1961 national goal. The crew consisted of three astronauts: Neil Armstrong (Commander), Buzz Aldrin (Lunar Module Pilot), and Michael Collins (Command Module Pilot). Armstrong and Aldrin landed on the Moon's Sea of Tranquility on July 20, 1969, while Collins orbited above in the Command Module Columbia. Armstrong became the first human to walk on the Moon, followed by Aldrin.",
+      "ground_truth": "Apollo 11's primary objective was to land astronauts on the Moon and return them safely to Earth, achieving the national goal set by President Kennedy in 1961. The three crew members were Neil Armstrong (Commander), Michael Collins (Command Module Pilot), and Buzz Aldrin (Lunar Module Pilot). Armstrong and Aldrin successfully landed on the Sea of Tranquility on July 20, 1969, with Armstrong being the first human to walk on the Moon."
+    },
+    {
+      "category": "technical",
+      "question": "What were the main spacecraft components of Apollo 11, and what role did each play during the mission?",
+      "contexts": [
+        "Apollo 11 consisted of two main spacecraft: the Command/Service Module (CSM), named Columbia, and the Lunar Module (LM), named Eagle. The CSM carried the crew from Earth to lunar orbit and back. The Service Module provided propulsion, electrical power, and life support during the transit phases.",
+        "The Lunar Module Eagle was a two-stage vehicle. The descent stage carried the fuel for landing and served as a launch platform on the Moon's surface. The ascent stage housed the crew during their time on the Moon and fired its engine to return Armstrong and Aldrin to lunar orbit for rendezvous with Columbia.",
+        "The Saturn V rocket, standing 363 feet tall, launched Apollo 11 from Kennedy Space Center on July 16, 1969. It used three stages to propel the spacecraft out of Earth's atmosphere and onto a translunar trajectory before separating."
+      ],
+      "answer": "Apollo 11 had three key hardware elements. The Saturn V rocket provided the launch vehicle across three stages to reach translunar trajectory. The Command/Service Module Columbia handled crew transport, propulsion, and life support for the journey to and from the Moon. The Lunar Module Eagle, a two-stage craft, carried Armstrong and Aldrin to the surface via its descent stage, then used its ascent stage engine to return them to lunar orbit for docking with Columbia.",
+      "ground_truth": "Apollo 11 comprised the Saturn V launch vehicle and two spacecraft: the Command/Service Module Columbia, which transported the crew and provided power and propulsion during transit, and the Lunar Module Eagle, whose descent stage enabled the lunar landing and whose ascent stage returned Armstrong and Aldrin to orbit after their moonwalk."
+    },
+    {
+      "category": "timeline",
+      "question": "What were the key mission milestones and their timestamps during Apollo 11?",
+      "contexts": [
+        "Apollo 11 launched from Launch Complex 39A at Kennedy Space Center at 13:32 UTC on July 16, 1969. The spacecraft entered lunar orbit on July 19 after a three-day transit. Lunar orbit insertion was achieved with a six-minute burn of the Service Module engine.",
+        "The Eagle undocked from Columbia on July 20, 1969, and began its powered descent to the surface. Touchdown at the Sea of Tranquility was confirmed at 20:17 UTC on July 20. Neil Armstrong stepped onto the surface at 02:56 UTC on July 21, with Buzz Aldrin following at 03:15 UTC.",
+        "The Eagle's ascent stage lifted off from the lunar surface at 17:54 UTC on July 21, 1969. Docking with Columbia occurred at 21:35 UTC. The crew fired the Service Module engine to leave lunar orbit on July 22 and splashed down in the Pacific Ocean at 16:50 UTC on July 24, 1969, completing an eight-day mission."
+      ],
+      "answer": "Apollo 11's key milestones: launch on July 16 at 13:32 UTC; lunar orbit insertion on July 19; Eagle touchdown on July 20 at 20:17 UTC; Armstrong's first step on July 21 at 02:56 UTC; Aldrin joining at 03:15 UTC; Eagle ascent on July 21 at 17:54 UTC; docking with Columbia at 21:35 UTC; trans-Earth injection on July 22; and Pacific Ocean splashdown on July 24 at 16:50 UTC — an eight-day mission in total.",
+      "ground_truth": "The major Apollo 11 timestamps were: launch July 16 at 13:32 UTC, lunar orbit insertion July 19, Eagle landing July 20 at 20:17 UTC, Armstrong's moonwalk beginning July 21 at 02:56 UTC, Eagle liftoff July 21 at 17:54 UTC, and splashdown July 24 at 16:50 UTC — totaling approximately 8 days, 3 hours, and 18 minutes."
+    },
+    {
+      "category": "crew",
+      "question": "What were the individual backgrounds and assigned roles of each Apollo 11 crew member?",
+      "contexts": [
+        "Neil Armstrong, the mission commander, was a former naval aviator and test pilot who had previously flown on Gemini 8 in 1966, during which he performed the first manual space docking. He was responsible for piloting the Lunar Module to the surface and was the first to step onto the Moon.",
+        "Buzz Aldrin, the Lunar Module Pilot, held a doctorate in orbital mechanics from MIT. He had previously flown on Gemini 12, where he performed record-breaking spacewalks. On Apollo 11, Aldrin co-piloted the Eagle and was the second human to walk on the Moon.",
+        "Michael Collins, the Command Module Pilot, was a former Air Force officer and test pilot who had flown on Gemini 10. His role on Apollo 11 was to maintain and pilot the Command Module Columbia in lunar orbit during the 21 hours Armstrong and Aldrin spent on the surface, remaining alone farther from Earth than any human before or since."
+      ],
+      "answer": "Neil Armstrong (Commander) was a former naval aviator and test pilot, previously on Gemini 8, who piloted the Eagle to the surface and became the first human on the Moon. Buzz Aldrin (Lunar Module Pilot) held a PhD in orbital mechanics from MIT, flew on Gemini 12, and was the second person to walk on the Moon. Michael Collins (Command Module Pilot) was an Air Force test pilot from Gemini 10 who solo-orbited the Moon in Columbia for 21 hours while his crewmates were on the surface.",
+      "ground_truth": "Armstrong (Commander, Gemini 8 veteran) piloted the LM and walked on the Moon first. Aldrin (LM Pilot, MIT orbital mechanics PhD, Gemini 12) walked second. Collins (CMP, Air Force test pilot, Gemini 10) orbited alone in Columbia throughout the surface operations, maintaining the spacecraft for the crew's return."
+    },
+    {
+      "category": "emergency",
+      "question": "What was the 1202 program alarm during the Eagle's descent, and how was it resolved?",
+      "contexts": [
+        "During the final minutes of the powered descent to the lunar surface, the onboard guidance computer in the Eagle began displaying '1202' program alarms. The alarm indicated that the computer was overloaded and unable to complete all its tasks within each processing cycle.",
+        "Flight controller Jack Garman at Mission Control in Houston had compiled a list of 'go/no-go' alarm codes prior to the mission. When the 1202 alarm appeared, guidance officer Steve Bales quickly identified it as an executive overflow alarm — not a mission-critical failure — and called 'go' to flight director Gene Kranz, allowing the descent to continue.",
+        "The overload was later found to be caused by the rendezvous radar being left in an active mode during descent, feeding unnecessary data into the computer. The computer's priority scheduling system correctly shed lower-priority tasks to protect guidance and navigation functions, which is why the landing could safely continue despite the alarms."
+      ],
+      "answer": "The 1202 alarm was a guidance computer executive overflow error that triggered repeatedly during Eagle's powered descent. It meant the computer was receiving more tasks than it could process in each cycle, partly due to the rendezvous radar feeding unsolicited data. Mission Control's Jack Garman and Steve Bales quickly identified it as non-critical — the computer's own priority system was correctly dropping low-priority tasks to protect navigation. Flight Director Gene Kranz called 'go' and the descent continued, culminating in a successful landing.",
+      "ground_truth": "The 1202 program alarm was a computer executive overflow caused by the rendezvous radar placing extra load on the LM guidance computer during descent. Flight controller Steve Bales, using a pre-mission alarm reference list prepared by Jack Garman, determined it was not mission-critical because the computer was correctly prioritizing guidance tasks. Gene Kranz gave a 'go' call and the landing proceeded normally."
+    },
+    {
+      "category": "emergency",
+      "question": "What contingency plans existed if Armstrong and Aldrin could not return from the lunar surface?",
+      "contexts": [
+        "NASA planners acknowledged the possibility that the Eagle's ascent engine could fail, stranding Armstrong and Aldrin on the Moon. The ascent engine had no backup — it was a single-point failure in the mission design. NASA relied heavily on the engine's simplicity and redundant internal components to ensure reliability.",
+        "President Nixon's speechwriter William Safire prepared an address titled 'In Event of Moon Disaster' for Nixon to deliver if the astronauts became stranded. The speech acknowledged their sacrifice and referred to them as having given their lives in mankind's most noble goal. It was never delivered.",
+        "Mission rules required the astronauts to lift off within a specific launch window each day to achieve rendezvous with Columbia. Missing several consecutive windows would make rescue impossible. Flight rules also defined abort scenarios during descent — including abort modes that would fire the ascent engine at various altitudes to return directly to orbit without landing."
+      ],
+      "answer": "If Armstrong and Aldrin could not return, no physical rescue was possible. The ascent engine was a single-point failure with no backup, though it was engineered for maximum reliability through simplicity. President Nixon had a 'In Event of Moon Disaster' speech prepared by William Safire, acknowledging the crew's sacrifice. Mission rules defined strict launch windows for orbital rendezvous — missing all of them meant the crew could not be recovered. Multiple descent abort modes were also defined to fire the ascent engine and return to orbit at various points before landing.",
+      "ground_truth": "No rescue mission was feasible if the ascent engine failed. NASA's contingency planning included abort modes during descent, strict rendezvous launch windows, and a presidential address prepared by William Safire for Nixon to read in the event the crew was stranded. The ascent engine's reliability was the sole safeguard against this outcome."
+    },
+    {
+      "category": "disaster_analysis",
+      "question": "What lessons from the Apollo 1 fire in 1967 directly influenced the safety design of Apollo 11?",
+      "contexts": [
+        "On January 27, 1967, a cabin fire during a launch rehearsal test killed Apollo 1 astronauts Gus Grissom, Ed White, and Roger Chaffee. The fire spread rapidly due to a pure oxygen atmosphere at higher-than-atmospheric pressure inside the sealed cabin, combined with flammable materials and faulty wiring.",
+        "Following the Apollo 1 accident, NASA undertook an extensive redesign of the Command Module. Over 1,400 wiring changes were made. Flammable materials inside the cabin were replaced with fire-resistant alternatives. The inward-opening hatch, which trapped the Apollo 1 crew, was replaced with a quick-opening outward hatch that could be opened in seconds.",
+        "NASA also changed the pre-launch atmosphere protocol. Instead of using pure oxygen at high pressure on the pad, the redesigned spacecraft used a mixed oxygen-nitrogen atmosphere at sea-level pressure during ground operations, switching to pure oxygen only after launch at reduced cabin pressure, significantly lowering fire risk."
+      ],
+      "answer": "The Apollo 1 fire drove fundamental safety changes that were incorporated into Apollo 11. Over 1,400 wiring corrections were made and flammable cabin materials were replaced with fire-resistant ones. The deadly inward-opening hatch was replaced with a quick-release outward hatch. Pre-launch atmosphere was changed from pure high-pressure oxygen to a mixed oxygen-nitrogen environment at sea-level pressure, reducing ignition risk dramatically. These reforms directly improved crew survivability for all subsequent Apollo missions.",
+      "ground_truth": "Apollo 1's fire investigation led to redesigned Command Module wiring (1,400+ changes), replacement of flammable materials, a new quick-opening outward hatch, and a shift from pure high-pressure oxygen on the pad to a mixed gas atmosphere — all changes present in the Apollo 11 spacecraft that reduced fire risk and improved crew escape capability."
+    }
+  ]
+}
