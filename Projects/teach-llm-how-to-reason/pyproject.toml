@@ -1,0 +1,13 @@
+[project]
+name = "teach-llm-how-to-reason"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12.3"
+authors=[
+    {name = "Eedy Green", email = "eedygreen@outlook.com"}
+]
+dependencies = [
+    "ipykernel>=7.1.0",
+    "pip>=25.3",
+]
