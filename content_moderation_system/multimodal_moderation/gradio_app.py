@@ -210,7 +210,7 @@ class ChatSessionWithTracing:
         # NOTE: this is start_span, NOT start_as_current_span because we want to keep this span open across multiple chat turns
         #      and only close it when the conversation ends.
         self.conversation_span = tracer.start_span(
-            "span",
+            "conversation",
             attributes={"session.id": self.session_id}
         )
 
@@ -272,7 +272,8 @@ class ChatSessionWithTracing:
 
                         # set an attribute "feedback" in the tracing span with the feedback message
                         # HINT: use span.set_attribute with "feedback" as the key and feedback as the value
-                        span.set_attribute("feedback", feedback)
+                        with trace.start_current_span("feedback") as feedback_span:
+                            feedback_span.set_attribute("feedback", feedback)
 
                         return response, past_messages, feedback
 
@@ -295,7 +296,9 @@ class ChatSessionWithTracing:
                                 response = (
                                     "[This content was flagged by moderation and not sent to the AI. Please try again.]"
                                 )
-
+                                with trace.start_current_span("feedback") as feedback_span:
+                                    feedback_span.set_attribute("feedback", feedback)
+                                    
                                 return response, past_messages, feedback
 
                             # Content safe - read file and add to prompt
