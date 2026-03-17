@@ -272,7 +272,7 @@ class ChatSessionWithTracing:
 
                         # set an attribute "feedback" in the tracing span with the feedback message
                         # HINT: use span.set_attribute with "feedback" as the key and feedback as the value
-                        with trace.start_current_span("feedback") as feedback_span:
+                        with tracer.start_as_current_span("feedback") as feedback_span:
                             feedback_span.set_attribute("feedback", feedback)
 
                         return response, past_messages, feedback
@@ -296,9 +296,9 @@ class ChatSessionWithTracing:
                                 response = (
                                     "[This content was flagged by moderation and not sent to the AI. Please try again.]"
                                 )
-                                with trace.start_current_span("feedback") as feedback_span:
+                                with tracer.start_as_current_span("feedback") as feedback_span:
                                     feedback_span.set_attribute("feedback", feedback)
-                                    
+
                                 return response, past_messages, feedback
 
                             # Content safe - read file and add to prompt
