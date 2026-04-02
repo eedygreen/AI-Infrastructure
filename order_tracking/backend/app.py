@@ -11,6 +11,13 @@ order_tracker = OrderTracker(in_memory_storage)
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
 
+@app.route('/health')
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "service": "order_tracker",
+        "version": "1.0.0"
+    }), 200
 @app.route('/<path:filename>')
 def serve_static(filename):
     return send_from_directory(app.static_folder, filename)
