@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # Order Tracker API Service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: order-tracker-api
+    image: order-tracker:latest
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - PORT=5000
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount logs directory for persistence
+      - logs-data:/app/logs
+      # Development: Mount source code for live reload (comment out in production)
+      # - ./backend:/app/backend
+      # - ./app.py:/app/app.py
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - order-tracker-network
+
+  # Optional: Add Redis for caching (uncomment to enable)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: order-tracker-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis-data:/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - order-tracker-network
+
+  # Optional: Add PostgreSQL for persistence (uncomment to enable)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: order-tracker-db
+  #   environment:
+  #     - POSTGRES_DB=order_tracker
+  #     - POSTGRES_USER=orderuser
+  #     - POSTGRES_PASSWORD=changeme123
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - order-tracker-network
+
+networks:
+  order-tracker-network:
+    driver: bridge
+
+volumes:
+  logs-data:
