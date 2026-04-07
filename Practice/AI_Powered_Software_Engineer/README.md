@@ -4,7 +4,7 @@ The structure of this course is as follows:
 ## Module 1
 [x] Test Driven Development TDD (Pytest)
 
-[**Project (Order Tracking)**]
+[**Project (Order Tracking)**](https://github.com/eedygreen/AI-Infrastructure/tree/270886851cc73c3b2fffabe0778221976520b93f/Projects/order_tracking)
 
 ## Module 2 
 ### Designs Pattern
