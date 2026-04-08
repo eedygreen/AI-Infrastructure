@@ -1,6 +1,6 @@
 import unittest
 
-from balance.budget_strategy import (
+from budget.budget_strategy import (
     FiftyThirtyTwentyStrategy,
     ZeroBasedBudgetStrategy,
     EnvelopeBudgetingStrategy,
