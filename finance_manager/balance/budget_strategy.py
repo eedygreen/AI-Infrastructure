@@ -214,3 +214,4 @@ class BudgetPlanner:
         summaries.append(f"{'Total Allocate':20s} ${total:10.2f} (100.0%)")
 
         return "\n".join(summaries)
+    
