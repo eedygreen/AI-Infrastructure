@@ -1,0 +1,18 @@
+[project]
+name = "ethics-in-ai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "aif360>=0.6.1",
+    "datasets>=4.8.3",
+    "dotenv>=0.9.9",
+    "ipykernel>=7.2.0",
+    "lime>=0.2.0.1",
+    "numpy>=2.4.3",
+    "pandas>=3.0.1",
+    "seaborn>=0.13.2",
+    "torch>=2.10.0",
+    "transformers>=5.3.0",
+]
