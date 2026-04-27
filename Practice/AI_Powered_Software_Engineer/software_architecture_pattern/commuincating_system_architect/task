@@ -1,0 +1,15 @@
+Your Task
+Create a Solution Architecture Diagram (also known as a Component or C4-style Container Diagram) that shows the overall deployed structure of the security system
+
+Your diagram must include the following components:
+
+Web Dashboard: How users interact with the solution
+API Gateway: The single entry point for client applications.
+Device Ingestion Service: Responsible for receiving reported data from device sensors
+Event Bus: The central nervous system for asynchronous communication.
+Central Control Service: The core service that, among other things:
+Consumes, validates, and transforms the data;
+Adjusts lighting and A/C targets according to preconfigured values for given numbers of occupants;
+Writes historical records out to storage.
+Data Stores: Show at least two different types of databases (e.g., a relational DB for user accounts and a time-series DB for sensor data).
+The diagram should clearly illustrate the primary communication paths between these components (e.g., showing which services talk to the API Gateway vs. which services communicate via the Event Bus).

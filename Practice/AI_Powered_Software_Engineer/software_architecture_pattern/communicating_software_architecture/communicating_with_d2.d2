@@ -1,0 +1,14 @@
+shape: sequence_diagram
+
+user: User's Browser
+api: API Gateway
+server: Central Server
+device: Maglock device
+
+user -> api: Checking if the user is logged in
+api -> server: Checking if the user is authorized to perform the action.
+server <-> server: User is authorized
+server -> device: Issuing commands to devices
+server <- device: Unlocking
+server -> api: Device Unlocked
+api -> user: Access Granted

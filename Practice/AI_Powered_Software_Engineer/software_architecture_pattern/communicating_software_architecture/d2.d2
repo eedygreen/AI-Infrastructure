@@ -1,0 +1,16 @@
+shape: sequence_diagram
+
+user: User's Browser
+api: API Gateway
+server: Central Server
+device: Maglock device
+
+user -> api: POST /api/doors/exterior/lock
+api -> server: Forward request with auth token
+server <-> server: verify user session
+server <-> server: check authorization door control
+server -> device: Send Lock command
+device <-> device: enage magnetic lock
+device -> server: Retrun-Status: Unlocked
+server -> api: Success Response with Status
+api -> user: HTTP 200 Ok 
