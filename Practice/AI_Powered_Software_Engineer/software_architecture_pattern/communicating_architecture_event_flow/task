@@ -1,0 +1,13 @@
+Your Task
+Create a Flowchart or Data Flow Diagram that illustrates the asynchronous journey of this data packet through the system.
+
+Your diagram should include the following components:
+
+Occupancy Sensor: The external device that originates the data.
+Device Ingestion Service: The service responsible for receiving raw data from devices.
+Event Bus: The central message broker that decouples services.
+Central Controller: The core service that, among other things:
+Consumes, validates, and transforms the data;
+Adjusts lighting and A/C targets according to preconfigured values for given numbers of occupants;
+Writes historical records out to storage.
+Time-Series Database: The specialized database where the final, processed data is stored.
