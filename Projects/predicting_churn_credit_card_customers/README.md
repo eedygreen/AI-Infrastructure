@@ -139,6 +139,15 @@ Minimum expected outputs:
 
 ---
 
+## Reused Saved Models
+To load the saved models for inference or further analysis, you can use the following code snippet:
+```
+random_forest_model = joblib.load('./models/rfc_model.pkl')
+logistic_regression_model = joblib.load('./models/logistic_model.pkl')
+```
+
+---
+
 ## Notes
 
 - **Logging** — all logs are written in append (mode="a") mode per run to accumulate logs across runs.
