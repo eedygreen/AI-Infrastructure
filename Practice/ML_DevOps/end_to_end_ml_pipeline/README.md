@@ -7,3 +7,8 @@ To select two or more pipeline steps, you can use a comma-separated list of step
 ```
 mlflow run . -P hydra_options="main.execute_steps='download,preprocess'"
 ```
+
+Inference 
+```
+mlflow run . -P hydra_options="main.project_name=classification_prod"
+```
