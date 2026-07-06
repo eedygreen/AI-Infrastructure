@@ -1,1 +1,0 @@
-*/10 * * * * /home/idris/customer_attrition/dynamic_risk/bin/python /home/idris/customer_attrition/fullprocess.py >> /var/log/fullprocess.log 2>&1
