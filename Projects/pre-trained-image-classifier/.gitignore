@@ -1,8 +1,0 @@
-
-*.zip
-venv
-.obsidian
-.ipynb_*
-Anaconda*
-*__pycache__
-
