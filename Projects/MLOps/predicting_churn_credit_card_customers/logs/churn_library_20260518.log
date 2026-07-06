@@ -1,0 +1,50 @@
+2026-05-18 11:14:04 - INFO - Data imported successfully!
+2026-05-18 11:14:05 - INFO - EDA completed successfully
+2026-05-18 11:14:05 - INFO - EDA plot found: churn_distribution.png
+2026-05-18 11:14:05 - INFO - EDA plot found: customer_age_distribution.png
+2026-05-18 11:14:05 - INFO - EDA plot found: marital_status_distribution.png
+2026-05-18 11:14:05 - INFO - EDA plot found: total_trans_ct_density.png
+2026-05-18 11:14:05 - INFO - EDA plot found: correlation_heatmap.png
+2026-05-18 11:14:05 - INFO - Encoder helper completed successfully
+2026-05-18 11:14:05 - INFO - Feature: test completed successfully!
+2026-05-18 11:14:15 - INFO - Model training: test completed successfully!
+2026-05-18 11:24:27 - INFO - Data imported successfully!
+2026-05-18 11:24:28 - INFO - EDA completed successfully
+2026-05-18 11:24:28 - INFO - EDA plot found: churn_distribution.png
+2026-05-18 11:24:28 - INFO - EDA plot found: customer_age_distribution.png
+2026-05-18 11:24:28 - INFO - EDA plot found: marital_status_distribution.png
+2026-05-18 11:24:28 - INFO - EDA plot found: total_trans_ct_density.png
+2026-05-18 11:24:28 - INFO - EDA plot found: correlation_heatmap.png
+2026-05-18 11:24:28 - INFO - Encoder helper completed successfully
+2026-05-18 11:24:28 - INFO - Feature: test completed successfully!
+2026-05-18 11:24:38 - INFO - Model training: test completed successfully!
+2026-05-18 11:33:22 - INFO - Data imported successfully!
+2026-05-18 11:33:23 - INFO - EDA completed successfully
+2026-05-18 11:33:23 - INFO - EDA plot found: churn_distribution.png
+2026-05-18 11:33:23 - INFO - EDA plot found: customer_age_distribution.png
+2026-05-18 11:33:23 - INFO - EDA plot found: marital_status_distribution.png
+2026-05-18 11:33:23 - INFO - EDA plot found: total_trans_ct_density.png
+2026-05-18 11:33:23 - INFO - EDA plot found: correlation_heatmap.png
+2026-05-18 11:33:23 - INFO - Encoder helper completed successfully
+2026-05-18 11:33:23 - INFO - Feature: test completed successfully!
+2026-05-18 11:34:08 - INFO - Model training: test completed successfully!
+2026-05-18 12:01:57 - INFO - Data imported successfully!
+2026-05-18 12:01:57 - INFO - EDA completed successfully
+2026-05-18 12:01:57 - INFO - EDA plot found: churn_distribution.png
+2026-05-18 12:01:57 - INFO - EDA plot found: customer_age_distribution.png
+2026-05-18 12:01:57 - INFO - EDA plot found: marital_status_distribution.png
+2026-05-18 12:01:57 - INFO - EDA plot found: total_trans_ct_density.png
+2026-05-18 12:01:57 - INFO - EDA plot found: correlation_heatmap.png
+2026-05-18 12:01:58 - INFO - Encoder helper completed successfully
+2026-05-18 12:01:58 - INFO - Feature: test completed successfully!
+2026-05-18 12:02:44 - INFO - Model training: test completed successfully!
+2026-05-18 12:17:50 - INFO - Data imported successfully!
+2026-05-18 12:17:50 - INFO - EDA completed successfully
+2026-05-18 12:17:50 - INFO - EDA plot found: churn_distribution.png
+2026-05-18 12:17:50 - INFO - EDA plot found: customer_age_distribution.png
+2026-05-18 12:17:50 - INFO - EDA plot found: marital_status_distribution.png
+2026-05-18 12:17:50 - INFO - EDA plot found: total_trans_ct_density.png
+2026-05-18 12:17:50 - INFO - EDA plot found: correlation_heatmap.png
+2026-05-18 12:17:50 - INFO - Encoder helper completed successfully
+2026-05-18 12:17:50 - INFO - Feature: test completed successfully!
+2026-05-18 12:18:34 - INFO - Model training: test completed successfully!
