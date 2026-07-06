@@ -1,3 +1,6 @@
 [submodule "Resources/fastbook"]
 	path = Resources/fastbook
 	url = https://github.com/fastai/fastbook.git
+[submodule "Projects/Projects/MLOps/build-ml-pipeline-for-short-term-rental-p"]
+	path = Projects/Projects/MLOps/build-ml-pipeline-for-short-term-rental-p
+	url = https://github.com/eedygreen/build-ml-pipeline-for-short-term-rental-prices.git
