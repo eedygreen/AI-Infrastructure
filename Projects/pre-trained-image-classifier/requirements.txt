@@ -1,6 +1,0 @@
-jupyterlab
-notebook
-scikit-learn
-torchvision
-torch
-Pillow
