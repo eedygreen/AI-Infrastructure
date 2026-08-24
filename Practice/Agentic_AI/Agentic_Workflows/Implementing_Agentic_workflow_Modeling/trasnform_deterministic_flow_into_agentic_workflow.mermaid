@@ -1,0 +1,16 @@
+flowchart TD
+  Start[Start] --> StrategicAgent[Coordinate Aid requests]
+  subgraph Parallel information Gathering
+    InventoryAgent[InventoryAgent]
+    WeatherAgent[WeatherAgent]
+    RoadAgent[RoadAgent]
+  end
+  StrategicAgent --> InventoryAgent & WeatherAgent & RoadAgent
+  InventoryAgent --> StrategicAgent
+  WeatherAgent --> StrategicAgent
+  RoadAgent --> StrategicAgent
+  StrategicAgent --> DispatchDecision{Ready to Dispatch?}
+  DispatchDecision -- Yes --> DispatchAgent[DispatchAgent]
+  DispatchDecision -- No --> Replan[StrategicAgent: Replan or Wait]
+  DispatchAgent --> Confirm[StrategicAgent: Confirm Delivery]
+  Confirm --> End[End]
