@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "AI-Powered-Agentic-Workflow"
+version = "0.1.0"
+description = "AI Powered Agentic Workflow for product managers"
+authors = [{name = "Idris"}]
+requires-python = ">=3.13"
+
+[tool.setuptools.packages.find]
+include = ["workflow_agents*", "utils*"]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+
+[tool.flake8]
+max-line-length = 79
+exclude = [".venv", "build/lib", ".git", "__pycache__", ".env", ".pytest_cache"]
