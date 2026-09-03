@@ -1,0 +1,43 @@
+2026-09-03 12:23:38 - INFO - Loading spec from /home/isah-idris/Documents/GitHub/AI-Infrastructure/Projects/Agentic_AI/AI-Powered_Agentic_Workflow_for_Project_Management/Product-Spec-Email-Router.txt
+2026-09-03 12:23:38 - INFO - loadded Successfully!
+2026-09-03 12:23:38 - INFO - 
+*** Workflow execution started ***
+
+2026-09-03 12:23:38 - INFO - Task to complete in this workflow, workflow prompt = What would the development tasks for this product be?
+2026-09-03 12:23:38 - INFO - 
+Defining workflow steps from the workflow prompt
+2026-09-03 12:23:38 - INFO - [Accessing LLM] connecting to https://openai.vocareum.com/v1
+2026-09-03 12:23:38 - INFO - [Accessing LLM] connection Successfull!
+2026-09-03 12:23:38 - INFO - [Steps Extractions] extracting steps...
+2026-09-03 12:23:38 - INFO - [LLM Chat] sending prompt...
+2026-09-03 12:23:41 - INFO - [LLM Chat] chat completed!
+2026-09-03 12:23:41 - INFO - [Steps Extraction] extraction completed!
+2026-09-03 12:23:41 - INFO - Step: The development tasks for a product typically involve the following steps:
+2026-09-03 12:23:41 - INFO - [Accessing LLM] connecting to https://openai.vocareum.com/v1
+2026-09-03 12:23:41 - INFO - [Accessing LLM] connection Successfull!
+2026-09-03 12:23:41 - INFO - [Embeddings] creating embeddings...
+2026-09-03 12:23:43 - INFO - [Embeddings] Successfully created embeddings
+2026-09-03 12:23:43 - INFO - [Accessing LLM] connecting to https://openai.vocareum.com/v1
+2026-09-03 12:23:43 - INFO - [Accessing LLM] connection Successfull!
+2026-09-03 12:23:43 - INFO - [Embeddings] creating embeddings...
+2026-09-03 12:23:45 - INFO - [Embeddings] Successfully created embeddings
+2026-09-03 12:23:45 - INFO - 0.33026596805500696
+2026-09-03 12:23:45 - INFO - [Accessing LLM] connecting to https://openai.vocareum.com/v1
+2026-09-03 12:23:45 - INFO - [Accessing LLM] connection Successfull!
+2026-09-03 12:23:45 - INFO - [Embeddings] creating embeddings...
+2026-09-03 12:23:47 - INFO - [Embeddings] Successfully created embeddings
+2026-09-03 12:23:47 - INFO - 0.47334452948973416
+2026-09-03 12:23:47 - INFO - [Accessing LLM] connecting to https://openai.vocareum.com/v1
+2026-09-03 12:23:47 - INFO - [Accessing LLM] connection Successfull!
+2026-09-03 12:23:47 - INFO - [Embeddings] creating embeddings...
+2026-09-03 12:23:49 - INFO - [Embeddings] Successfully created embeddings
+2026-09-03 12:23:49 - INFO - 0.4172392500918459
+2026-09-03 12:23:49 - INFO - [Router] Best agent: Program Manager (score=0.473)
+2026-09-03 12:23:49 - INFO - [Accessing LLM] connecting to https://openai.vocareum.com/v1
+2026-09-03 12:23:49 - INFO - [Accessing LLM] connection Successfull!
+2026-09-03 12:23:49 - INFO - [LLM Chat] sending prompt...
+2026-09-03 12:24:20 - INFO - [Accessing LLM] connecting to https://openai.vocareum.com/v1
+2026-09-03 12:24:20 - INFO - [Accessing LLM] connection Successfull!
+2026-09-03 12:24:23 - INFO - [Knowledge Source] DirectPromptAgent has no injected knowledge — this response is generated purely from the LLM's own training data.
+
+
