@@ -287,7 +287,7 @@ class ChineseBankPostOfficeAgent(ToolCallingAgent):
     def __init__(self, model_to_use: OpenAIServerModel):
         self.request_analyzer = RequestAnalysisAgent(model_to_use)
         # Instantiate the UrgencyDetectorAgent
-        self.urgency_detector: Optional[UrgencyDetectorAgent] = UrgencyDetectorAgent() # Placeholder
+        self.urgency_detector: Optional[UrgencyDetectorAgent] = UrgencyDetectorAgent(model_to_use)
         
         super().__init__(
             tools=[
@@ -329,10 +329,6 @@ class ChineseBankPostOfficeAgent(ToolCallingAgent):
 
         self.memory.steps = []
         
-        # TODO: Learner Task 4: Update the orchestrator_prompt
-        # - Incorporate 'urgency_level' into the context provided to the Orchestrator's LLM.
-        # - Modify the instructions to ensure the LLM passes the 'is_urgent' boolean flag 
-        #   (derived from 'urgency_level') to the chosen 'handle_*' tool.
         orchestrator_prompt = f"""
         Orchestrator:
         Customer: '{customer_name}', Request: "{request}"
