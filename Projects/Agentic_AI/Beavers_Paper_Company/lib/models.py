@@ -24,6 +24,7 @@ class ParsedRequest:
     unmatched: List[str]
     notes: str = ""
     deadline_unconfirmed: Optional[str] = None     # a deadline before the request date: flagged, never guessed
+    failed: bool = False                           # parsing itself failed (system problem): never blame the customer
 
 @dataclass
 class RequestContext:
