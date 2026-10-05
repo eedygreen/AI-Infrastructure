@@ -1,17 +1,21 @@
 """The test harness: runs the sample requests through the agents and writes test_results.csv."""
 
 import pandas as pd
-import time
+import time, os
 from datetime import datetime
 from typing import Optional
 from utils import logger
-
+from lib import config
 from lib.agents import CustomerSupportAgent, InventoryAgent, OrchestratorAgent, OrderAgent, QuoteAgent
 from lib.database import ensure_runtime_tables
 from lib.starter_utils import db_engine, generate_financial_report, init_database
 
 
-# Run your test scenarios by writing them here. Make sure to keep track of them.
+def _save_results(results):
+    """Write test_results.csv. Called after every request, so a stop or a crash keeps everything finished so far.
+    Written to a temporary file and then renamed, so the file is never left half-written."""
+    pd.DataFrame(results).to_csv("test_results.csv.tmp", index=False)
+    os.replace("test_results.csv.tmp", "test_results.csv")
 
 def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False):
     
@@ -53,6 +57,7 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False):
     )
 
     results = []
+    parse_failures_in_a_row = 0
     for request_number, (_, row) in enumerate(quote_requests_sample.iterrows(), start=1):
         request_date = row["request_date"].strftime("%Y-%m-%d")
 
@@ -67,11 +72,21 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False):
 
         try:
             response = customer_agent.handle(request_with_date, request_date, request_number)
+            parse_failed = customer_agent.last_ctx.parsed.failed
         except Exception as e:
             logger.error("request %s crashed", request_number)
             response = f"We could not process this request right now({type(e).__name__})."
+            parse_failed = False
         orchestrator.drain_background()     # test harness only: keep the books determinstic
 
+        # A rejected key or an unreachable model fails EVERY request the same way: stop instead of writing a run of apologies.
+        parse_failures_in_a_row = parse_failures_in_a_row + 1 if parse_failed else 0
+        stop_run = parse_failures_in_a_row >= config.MAX_CONSECUTIVE_PARSE_FAILURES
+        _save_results(results=results)
+        if stop_run:
+            raise SystemExit(f"Stopping: {parse_failures_in_a_row} requests in a row could not be understood because "
+                             "the model call failed. Check OPENAI_API_KEY and network access, then rerun." 
+                             "Results so far were saved to test_results.csv")
         # Update state
         report = generate_financial_report(request_date)
         current_cash = report["cash_balance"]
@@ -102,5 +117,5 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False):
     print(f"Final Inventory: ${final_report['inventory_value']:.2f}")
 
     # Save results
-    pd.DataFrame(results).to_csv("test_results.csv", index=False)
+    _save_results(results=results)
     return results
