@@ -7,23 +7,33 @@ import difflib
 import json
 import pandas as pd
 from smolagents import tool
-from typing import List
+from typing import List, Optional
 
 from lib import config
 from lib.database import CATALOG, _cash_in_conn, _commit_transaction, _retry, _stock_in_conn
 from lib.models import RequestContext
 from lib.policy import apply_price_policy, discount_cap, extract_discount_hint, list_unit_price
-from lib.starter_utils import db_engine, generate_financial_report, get_all_inventory, get_stock_level, get_supplier_delivery_date, search_quote_history
+from lib.starter_utils import (
+    create_transaction, db_engine, 
+    generate_financial_report, 
+    get_all_inventory,
+    get_cash_balance, get_stock_level,
+    get_supplier_delivery_date,
+    search_quote_history
+)
 
 
 # Tools for inventory agent
 # ---------------------------------------------------------------------------
 # Shared inventory helpers (deterministic, no LLM)
 # ---------------------------------------------------------------------------
-def _low_stock_items(request_date: str) -> List[dict]:
-    """Deterministic reorder scan: items below min_stock_level, with a top-up quantity."""
+def _low_stock_items(request_date: str, stock: Optional[dict] = None) -> List[dict]:
+    """Deterministic reorder scan: items below min_stock_level, with a top-up quantity.
+    `stock` is the full inventory if the caller already read it (the tools do, with get_all_inventory).
+    """
     inventory = pd.read_sql("SELECT item_name, min_stock_level FROM inventory", db_engine)
-    stock = get_all_inventory(as_of_date=request_date)
+    if stock is None:
+        stock = get_all_inventory(as_of_date=request_date)
     low = []
     for _, row in inventory.iterrows():
         name, minimum = row["item_name"], int(row["min_stock_level"])
@@ -34,8 +44,13 @@ def _low_stock_items(request_date: str) -> List[dict]:
     return low
 
 
-def _place_restock(ctx: RequestContext, item_name: str, quantity: int, purpose: str) -> dict:
-    """Guarded stock purchase. Cash is checked inside the same DB transaction as the insert."""
+def _place_restock(ctx: RequestContext, item_name: str, quantity: int,
+                   purpose: str, cash_available: float, writer=create_transaction) -> dict:
+    """Guarded stock purchase. 
+    The calling tool reads the cash balance with get_cash_balance and passes it in: an early refusal that
+    costs nothing. The same check is repeated at the moment of writing, in case cash changed meanwhile.
+    `writer` is the starter's create_transaction.
+    """
     item = CATALOG.get(item_name)
     if not item or quantity <= 0:
         return {"item_name": item_name, "status": "denied", "reason": "invalid item or quantity"}
@@ -44,6 +59,14 @@ def _place_restock(ctx: RequestContext, item_name: str, quantity: int, purpose: 
         eta = _retry(lambda: get_supplier_delivery_date(input_date_str=ctx.request_date, quantity=quantity))
     except Exception:  # noqa: BLE001
         eta = None
+    if cash_available - cost < config.MIN_CASH_RESERVE:         # # get_cash_balance returns 0.0 on error: refuses
+        return {
+            "item_name": item_name,
+            "quantity": quantity,
+            "eta": eta,
+            "status": "denied",
+            "reason": "insuficient funds"
+        }
 
     def guard(conn):
         if _cash_in_conn(conn, ctx.request_date) - cost < config.MIN_CASH_RESERVE:
@@ -54,7 +77,7 @@ def _place_restock(ctx: RequestContext, item_name: str, quantity: int, purpose: 
         outcome = _retry(lambda: _commit_transaction(
             key=ctx.key(f"restock-{purpose}", item_name, quantity), kind=f"restock-{purpose}",
             item_name=item_name, transaction_type="stock_orders", units=quantity,
-            price=cost, date=ctx.request_date, guard=guard))
+            price=cost, date=ctx.request_date, guard=guard), writer=writer)
     except Exception as exc:  # noqa: BLE001
         ctx.log(f"restock write failed for {item_name}: {exc}")
         return {"item_name": item_name, "quantity": quantity, "status": "denied", "reason": "write failed"}
@@ -109,7 +132,12 @@ def make_inventory_restock_tools(ctx: RequestContext) -> list:
         decision = ctx.decisions.get(item_name)
         if not decision or decision.get("action") != "restock_then_ship":
             return json.dumps({"item_name": item_name, "status": "denied", "reason": "not approved"})
-        result = _place_restock(ctx, item_name, int(decision["restock_qty"]), "shortfall")
+        cash_available = get_cash_balance(as_of_date=ctx.request_date)
+        result = _place_restock(ctx, item_name,
+                                int(decision["restock_qty"]), "shortfall",
+                                cash_available=cash_available,
+                                writer=create_transaction
+                            )
         ctx.restocks[item_name] = result
         return json.dumps({k: result[k] for k in ("item_name", "status", "eta") if k in result})
 
@@ -120,7 +148,8 @@ def make_inventory_replenish_tools(ctx: RequestContext) -> list:
     @tool
     def find_low_stock() -> str:
         """List stocked items that are below their reorder point, with the suggested top-up quantity."""
-        return json.dumps(_low_stock_items(ctx.request_date))
+        stock = get_all_inventory(as_of_date=ctx.request_date)
+        return json.dumps(_low_stock_items(ctx.request_date, stock=stock))
 
     @tool
     def restock_for_replenishment(item_name: str) -> str:
@@ -132,7 +161,13 @@ def make_inventory_replenish_tools(ctx: RequestContext) -> list:
         match = next((x for x in _low_stock_items(ctx.request_date) if x["item_name"] == item_name), None)
         if not match:
             return json.dumps({"item_name": item_name, "status": "skipped", "reason": "not below reorder point"})
-        result = _place_restock(ctx, item_name, match["suggested_quantity"], "replenishment")
+        cash_available = get_cash_balance(as_of_date=ctx.request_date)
+        result = _place_restock(ctx, item_name,
+                                match["suggested_quantity"], 
+                                "replenishment",
+                                cash_available=cash_available,
+                                writer=create_transaction
+                            )
         ctx.background.append(result)
         return json.dumps({k: result[k] for k in ("item_name", "status") if k in result})
 
@@ -246,7 +281,7 @@ def make_order_tools(ctx: RequestContext) -> list:
             return json.dumps({"item_name": item_name, "status": "denied", "reason": "no quote on file"})
         quantity = quote["quantity"]
 
-        def guard(conn):   # atomic: stock is verified in the SAME transaction as the insert
+        def guard(conn):   # checked just before the write, under the write lock
             if _stock_in_conn(conn, item_name, ctx.request_date) < quantity:
                 return "stock changed"
             return None
@@ -255,8 +290,10 @@ def make_order_tools(ctx: RequestContext) -> list:
             outcome = _retry(lambda: _commit_transaction(
                 key=ctx.key("sale", item_name, quantity), kind="sale", item_name=item_name,
                 transaction_type="sales", units=quantity, price=quote["line_total"],
-                date=ctx.request_date, guard=guard,
-                meta={"delivery_date": decision["delivery_date"], "total": quote["line_total"]}))
+                date=ctx.request_date, guard=guard, writer=create_transaction,
+                meta={"delivery_date": decision["delivery_date"], "total": quote["line_total"]}
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             ctx.log(f"sale write failed for {item_name}: {exc}")
             ctx.orders[item_name] = {"item_name": item_name, "status": "denied", "reason": "write failed"}
