@@ -181,6 +181,8 @@ CUSTOMER_REASONS = {
     "held_partial": "it was held because another item in your order could not be fulfilled",
 }
 
+PARSE_FAILED_MESSAGE = ("We could not process your message because of a temporary problem on our side. "
+                        "Please try again in a few minutes.")
 
 class OrchestratorAgent:
     def __init__(self, run_id: str, inventory: InventoryAgent, quote: QuoteAgent, order: OrderAgent):
@@ -341,8 +343,7 @@ class OrchestratorAgent:
         p = ctx.parsed
         out = [f"Thank you for your request (reference #{ctx.request_id})."]
         if p.failed:
-            out.append("We could not process your message because of a temporary problem on our side. "
-                "Please try again in a few minutes.")
+            out.append(PARSE_FAILED_MESSAGE)
             return "\n".join(out)
         if p.unmatched:
             out.append("We could not match these to products we sell: " + "; ".join(p.unmatched) + ".")
