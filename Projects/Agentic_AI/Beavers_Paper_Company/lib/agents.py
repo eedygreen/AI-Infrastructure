@@ -202,7 +202,8 @@ class OrchestratorAgent:
     def process(self, ctx: RequestContext, parsed: ParsedRequest) -> str:
         ctx.parsed = parsed
         if not parsed.lines:
-            ctx.log("no recognisable items; asking the customer to clarify")
+            ctx.log("parsing failed (system problem); not blaming the customer" if parsed.failed
+                    else "no recognisable items; asking the customer to clarify")
             return self.render(ctx, set())
         needs = self.plan(parsed)
         ctx.log(f"plan: {sorted(needs)} for {[l.item_name for l in parsed.lines]}")
