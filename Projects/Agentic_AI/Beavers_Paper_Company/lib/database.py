@@ -22,12 +22,22 @@ WRITE_LOCK = threading.RLock()   # single-process writer lock (SQLite is single-
 def ensure_runtime_tables(reset: bool = False) -> None:
     with db_engine.begin() as conn:
         if reset:
-            conn.execute(text("DROP TABLE IF EXISTS idempotency_keys"))
+            conn.execute(text("DROP TABLE IF EXISTS run_state"))
         conn.execute(text(
-            "CREATE TABLE IF NOT EXISTS idempotency_keys ("
-            "key TEXT PRIMARY KEY, kind TEXT, transaction_id INTEGER, "
-            "result TEXT, created_at TEXT)"
-        ))
+            "CREATE TABLE IF NOT EXISTS run_state (id INTEGER PRIMARY KEY, run_id TEXT)"))
+
+def save_run_id(run_id: str) -> None:
+    """Remember which run owns the idempotency keys in this database, so --resume can reuse it."""
+    with db_engine.begin() as conn:
+        conn.execute(text("INSERT OR REPLACE INTO run_state (id, run_id) VALUES (1, :run_id)"), {"run_id": run_id})
+
+def load_run_id() -> Optional[str]:
+    """The run id saved by save_run_id, or None (including for a database from before this existed)."""
+    try:
+        with db_engine.connect() as conn:
+            return conn.execute(text("SELECT run_id FROM run_state WHERE id = 1")).scalar()
+    except Exception:  # noqa: BLE001
+        return None
 
 def _stock_in_conn(conn, item_name: str, as_of_date: str) -> int:
     value = conn.execute(text("""
