@@ -24,6 +24,7 @@ AGENT_TIMEOUT_S = 120          # stop waiting on a specialist after this long
 AGENT_RETRIES = 1              # extra specialist attempts (only for missing ledger entries)
 DB_RETRIES = 3                 # attempts for a DB / supplier call
 BACKOFF_S = 0.3                # base backoff (doubles each attempt)
+MAX_CONSECUTIVE_PARSE_FAILURES = 3   # the harness stops after this many requests in a row whose parsing failed
 
 LIST_MARKUP = 0.30             # list price = unit_price * (1 + LIST_MARKUP)
 MIN_MARGIN = 0.10              # never sell below cost * (1 + MIN_MARGIN)
