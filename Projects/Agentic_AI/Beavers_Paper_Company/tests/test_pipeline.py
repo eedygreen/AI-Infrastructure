@@ -108,7 +108,7 @@ def test(fn):
     try:
         fn(); RESULTS.append((fn.__name__, True, ""))
     except Exception:
-        RESULTS.append((fn.__name__, False, traceback.format_exc(limit=3)))
+        RESULTS.append((fn.__name__, False, traceback.format_exc()))
     return fn
 
 
@@ -639,9 +639,15 @@ def harness_stops_when_parsing_keeps_failing_but_not_after_a_recovery():
             ps.run_test_scenarios(no_sleep=True)
         except SystemExit as exc:
             assert "2 requests in a row" in str(exc) and "OPENAI_API_KEY" in str(exc), exc
+            assert "saved to test_results.csv" in str(exc), exc
         else:
             raise AssertionError("the run should have stopped")
         assert smolagents.HOOKS["calls"].count("customer_support_agent:parse") == 2 * per_request   # requests 3 and 4 never started
+        # the work finished before the stop is NOT lost: both requests are in the file, and no temporary file is left behind
+        saved = pd.read_csv("test_results.csv")
+        assert list(saved.columns) == ["request_id", "request_date", "cash_balance", "inventory_value", "response"]
+        assert list(saved.request_id) == [1, 2], saved
+        assert not os.path.exists("test_results.csv.tmp")
     finally:
         ps.CustomerSupportAgent.handle, ps.MAX_CONSECUTIVE_PARSE_FAILURES, ps.time.sleep = original_handle, old_max, old_sleep
         smolagents.HOOKS["parse_garbage"] = False
@@ -697,6 +703,185 @@ def follow_up_for_a_different_item_is_still_ordered():
     reply, ctx = go(csa, orch, f"I need 50 {a} by 2025-04-10", rid=8, followup=lambda r, i: next(answers, None))
     assert len(rows(a, "sales")) == 1 and len(rows(b, "sales")) == 1, (rows(a, "sales"), rows(b, "sales"))
     assert ctx.orders[b]["status"] == "confirmed"
+
+
+def _quiet_run(**kwargs):
+    """Run the harness without the 1-second pauses."""
+    old = ps.time.sleep
+    ps.time.sleep = lambda s: None
+    try:
+        return ps.run_test_scenarios(no_sleep=True, **kwargs)
+    finally:
+        ps.time.sleep = old
+
+
+def _outcome(results):
+    """The comparable part of a harness result (CSV round-trips change number types, not values)."""
+    return [(int(r["request_id"]), r["request_date"], round(float(r["cash_balance"]), 2),
+             round(float(r["inventory_value"]), 2), r["response"]) for r in results]
+
+
+def _failing_requests(which):
+    """Make the model 'fail' for exactly these request numbers. Returns a function that undoes it."""
+    original = ps.CustomerSupportAgent.handle
+
+    def patched(self, raw, date, rid, followup=None):
+        smolagents.HOOKS["parse_garbage"] = rid in which
+        return original(self, raw, date, rid, followup)
+
+    ps.CustomerSupportAgent.handle = patched
+
+    def undo():
+        ps.CustomerSupportAgent.handle = original
+        smolagents.HOOKS["parse_garbage"] = False
+    return undo
+
+
+@test
+def resume_continues_a_stopped_run_and_ends_exactly_where_an_uninterrupted_run_ends():
+    # requests 1 and 3 are orders, so the books change early and again after the stop point
+    pd.DataFrame({"request": ["I need 20 A4 paper by 2025-04-20", "How much is 10 Cardstock?",
+                              "I need 15 Cardstock by 2025-04-25", "How much is 5 A4 paper?"],
+                  "job": list("abcd"), "event": list("wxyz"),
+                  "request_date": ["04/01/25", "04/02/25", "04/03/25", "04/04/25"]}).to_csv("quote_requests_sample.csv", index=False)
+    fresh()
+    whole = _quiet_run(); cash_whole = cash()                   # the reference: nothing interrupted
+    fresh(); first = _quiet_run(limit=2)                        # a run that only got through two requests
+    assert [r["request_id"] for r in first] == [1, 2]
+    cash_after_two = first[-1]["cash_balance"]
+    assert abs(cash_after_two - 50000) > 1, "request 1 must have changed the books for this test to mean anything"
+    resumed = _quiet_run(resume=True)
+    assert _outcome(resumed) == _outcome(whole), (_outcome(resumed), _outcome(whole))
+    assert _outcome(pd.read_csv("test_results.csv").to_dict("records")) == _outcome(whole)   # and so is the saved file
+    assert abs(cash() - cash_whole) < 0.01
+
+
+@test
+def resume_redoes_trailing_failed_requests_and_keeps_the_good_ones():
+    pd.DataFrame({"request": ["How much is 10 Cardstock?"] * 4, "job": list("abcd"), "event": list("wxyz"),
+                  "request_date": ["04/01/25", "04/02/25", "04/03/25", "04/04/25"]}).to_csv("quote_requests_sample.csv", index=False)
+    fresh(); whole = _quiet_run()                               # reference: the model never fails
+    fresh(); old_max = ps.MAX_CONSECUTIVE_PARSE_FAILURES; ps.MAX_CONSECUTIVE_PARSE_FAILURES = 2
+    undo = _failing_requests({3, 4})                            # requests 3 and 4 fail -> the run stops after request 4
+    try:
+        try:
+            _quiet_run()
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError("the run should have stopped")
+    finally:
+        undo(); ps.MAX_CONSECUTIVE_PARSE_FAILURES = old_max
+    saved = pd.read_csv("test_results.csv")
+    assert len(saved) == 4 and "temporary problem" in saved.response[2] and "temporary problem" in saved.response[3]
+    resumed = _quiet_run(resume=True)                           # the model is healthy again
+    assert _outcome(resumed) == _outcome(whole), (_outcome(resumed), _outcome(whole))
+    assert not any("temporary problem" in r["response"] for r in resumed)
+
+
+@test
+def resume_does_not_sell_twice_a_request_that_was_interrupted_after_its_sale():
+    """The dangerous case: the process dies after request 3's sale was written but before its row was saved."""
+    _write_sample_csv(); fresh()
+    whole = _quiet_run(); cash_whole = cash(); sales_whole = len(rows("A4 paper", "sales"))
+    assert sales_whole == 1
+    fresh()
+    original = ps.CustomerSupportAgent.handle
+
+    def interrupted(self, raw, date, rid, followup=None):
+        out = original(self, raw, date, rid, followup)
+        if rid == 3:
+            self.orchestrator.drain_background()
+            raise KeyboardInterrupt                             # dies here: sale is in the books, the row is not saved
+        return out
+
+    ps.CustomerSupportAgent.handle = interrupted
+    try:
+        try:
+            _quiet_run()
+        except KeyboardInterrupt:
+            pass
+    finally:
+        ps.CustomerSupportAgent.handle = original
+    assert len(pd.read_csv("test_results.csv")) == 2            # request 3 was never saved
+    assert len(rows("A4 paper", "sales")) == 1                  # ...but its sale is already in the books
+    resumed = _quiet_run(resume=True)
+    assert len(rows("A4 paper", "sales")) == 1, "the interrupted request was sold a second time"
+    assert "already placed" in resumed[2]["response"], resumed[2]["response"]
+    assert abs(cash() - cash_whole) < 0.01
+
+
+@test
+def resume_refuses_when_the_database_does_not_match_the_saved_results():
+    _write_sample_csv(); fresh(); _quiet_run(limit=2)
+    item = stocked(10)[0]
+    ps._commit_transaction(key="rogue", kind="sale", item_name=item, transaction_type="sales", units=1, price=999.0,
+                           date="2025-04-01", guard=lambda c: None)       # books changed behind the harness's back
+    csv_before = open("test_results.csv").read()
+    try:
+        _quiet_run(resume=True)
+    except SystemExit as exc:
+        assert "does not match the last saved result" in str(exc) and "without --resume" in str(exc), exc
+    else:
+        raise AssertionError("resume should have refused")
+    assert open("test_results.csv").read() == csv_before                 # a refusal changes nothing...
+    assert len(rows(item, "sales")) >= 1                                 # ...and does not wipe the database
+
+
+@test
+def resume_refuses_when_the_sample_file_has_changed():
+    _write_sample_csv(); fresh(); _quiet_run(limit=2)
+    pd.DataFrame({"request": ["How much is 10 Cardstock?"] * 3, "job": list("abc"), "event": list("xyz"),
+                  "request_date": ["05/01/25", "05/02/25", "05/03/25"]}).to_csv("quote_requests_sample.csv", index=False)
+    try:
+        _quiet_run(resume=True)
+    except SystemExit as exc:
+        assert "do not match quote_requests_sample.csv" in str(exc), exc
+    else:
+        raise AssertionError("resume should have refused")
+
+
+@test
+def without_the_flag_a_run_always_starts_over():
+    _write_sample_csv(); fresh(); first = _quiet_run(limit=2)
+    item = stocked(10)[0]
+    ps._commit_transaction(key="rogue", kind="sale", item_name=item, transaction_type="sales", units=1, price=999.0,
+                           date="2025-04-01", guard=lambda c: None)     # leftover state that --resume would refuse...
+    again = _quiet_run()                                                 # ...but a plain run just wipes it and starts over
+    assert [r["request_id"] for r in again] == [1, 2, 3]
+    assert _outcome(again[:2]) == _outcome(first)                        # the same two requests, redone from scratch
+    assert not any(float(p) == 999.0 for p in rows(item, "sales").price), "the old database was not wiped"
+
+
+@test
+def resume_with_nothing_saved_starts_from_the_beginning():
+    _write_sample_csv(); fresh()
+    if os.path.exists("test_results.csv"):
+        os.remove("test_results.csv")
+    out = _quiet_run(resume=True)
+    assert [r["request_id"] for r in out] == [1, 2, 3]
+
+
+@test
+def resume_flag_is_wired_through_main():
+    import main as entry
+    assert entry.parse_args([]).resume is False and entry.parse_args(["--resume"]).resume is True
+    _write_sample_csv(); fresh(); _quiet_run(limit=2)
+    old = ps.time.sleep; ps.time.sleep = lambda s: None
+    try:
+        assert [r["request_id"] for r in entry.main(["--resume", "--no-sleep"])] == [1, 2, 3]       # a clean resume works
+        fresh(); _quiet_run(limit=2)
+        item = stocked(10)[0]
+        ps._commit_transaction(key="rogue", kind="sale", item_name=item, transaction_type="sales", units=1, price=999.0,
+                               date="2025-04-01", guard=lambda c: None)
+        try:                                                   # only a REAL resume refuses tampered books
+            entry.main(["--resume", "--no-sleep"])
+        except SystemExit as exc:
+            assert "Cannot resume" in str(exc), exc
+        else:
+            raise AssertionError("--resume did not reach the harness")
+    finally:
+        ps.time.sleep = old
 
 
 @test
