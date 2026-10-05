@@ -590,6 +590,116 @@ def project_starter_wrapper_runs_the_same_entry_point():
 
 
 @test
+def parse_failure_is_reported_as_a_system_problem_not_as_unknown_items():
+    """Regression for: a model/API failure replied 'We could not match these to products we sell: <the customer's own words>'."""
+    orch, csa = fresh()
+    item, mn, price = stocked(10)
+    smolagents.HOOKS["fail"]["customer_support_agent"] = 99
+    before = len(pd.read_sql("SELECT * FROM transactions", ps.db_engine))
+    reply, ctx = go(csa, orch, f"I need 10 {item} by 2025-04-10")
+    assert ctx.parsed.failed is True
+    assert "temporary problem on our side" in reply, reply
+    assert "could not match" not in reply and item not in reply, reply          # never blames, never quotes the customer
+    assert len(pd.read_sql("SELECT * FROM transactions", ps.db_engine)) == before
+
+
+@test
+def genuinely_unknown_product_is_still_reported_as_unmatched():
+    orch, csa = fresh()
+    reply, ctx = go(csa, orch, "I need 10 unobtainium by 2025-04-10")
+    assert ctx.parsed.failed is False and "could not match" in reply and "unobtainium" in reply, reply
+
+
+@test
+def harness_stops_when_parsing_keeps_failing_but_not_after_a_recovery():
+    pd.DataFrame({"request": ["How much is 10 Cardstock?"] * 4, "job": list("abcd"), "event": list("wxyz"),
+                  "request_date": ["04/01/25", "04/02/25", "04/03/25", "04/04/25"]}).to_csv("quote_requests_sample.csv", index=False)
+    original_handle, old_max, old_sleep = ps.CustomerSupportAgent.handle, ps.MAX_CONSECUTIVE_PARSE_FAILURES, ps.time.sleep
+    ps.time.sleep = lambda s: None
+    per_request = ps.AGENT_RETRIES + 1                       # model runs used by one fully failed request
+
+    def failing_requests(which):                             # make the model "fail" for exactly these request numbers
+        def patched(self, raw, date, rid, followup=None):
+            smolagents.HOOKS["parse_garbage"] = rid in which
+            return original_handle(self, raw, date, rid, followup)
+        ps.CustomerSupportAgent.handle = patched
+
+    try:
+        # fail, fail, SUCCEED, fail: three failures, but never three in a row -> the run completes
+        fresh(); failing_requests({1, 2, 4}); ps.MAX_CONSECUTIVE_PARSE_FAILURES = 3
+        try:
+            out = ps.run_test_scenarios(no_sleep=True)
+        except SystemExit as exc:                            # SystemExit would otherwise kill the whole test script silently
+            raise AssertionError(f"the run stopped although the failures were not consecutive: {exc}")
+        failed = ["temporary problem" in r["response"] for r in out]
+        assert failed == [True, True, False, True], failed
+        # fail, fail, ... -> the run stops after the second request in a row
+        fresh(); failing_requests({1, 2, 3, 4}); ps.MAX_CONSECUTIVE_PARSE_FAILURES = 2
+        try:
+            ps.run_test_scenarios(no_sleep=True)
+        except SystemExit as exc:
+            assert "2 requests in a row" in str(exc) and "OPENAI_API_KEY" in str(exc), exc
+        else:
+            raise AssertionError("the run should have stopped")
+        assert smolagents.HOOKS["calls"].count("customer_support_agent:parse") == 2 * per_request   # requests 3 and 4 never started
+    finally:
+        ps.CustomerSupportAgent.handle, ps.MAX_CONSECUTIVE_PARSE_FAILURES, ps.time.sleep = original_handle, old_max, old_sleep
+        smolagents.HOOKS["parse_garbage"] = False
+
+
+@test
+def pricing_caps_are_halved_when_the_financial_report_is_unavailable():
+    """Regression for: the log said 'conservative caps' but the caps were NOT reduced when the report failed."""
+    orch, csa = fresh()
+    item, mn, price = stocked(10)
+    tools = importlib.import_module("lib.tools")
+
+    def cap_with(report):
+        c = ps.RequestContext(1, "2025-04-01", "t")
+        c.parsed = ps.ParsedRequest("r", None, ["quote"], [ps.LineItem(item, 500)], [])
+        c.stock[item] = {"shortfall": 0}
+        original = tools.generate_financial_report
+        tools.generate_financial_report = report
+        try:
+            ps.make_quote_pricing_tools(c)[0]()
+        finally:
+            tools.generate_financial_report = original
+        return c.pricing_ctx[item]["cap"]
+
+    def works_not_top(as_of_date): return {"top_selling_products": []}
+    def works_top(as_of_date): return {"top_selling_products": [{"item_name": item}]}
+    def broken(as_of_date): raise RuntimeError("report unavailable")
+
+    assert cap_with(works_not_top) == 0.10      # 500 units, report works, not a top seller
+    assert cap_with(works_top) == 0.05          # top seller: halved
+    assert cap_with(broken) == 0.05             # report unavailable: halved too (fails closed)
+
+
+@test
+def follow_up_with_a_different_quantity_does_not_sell_twice():
+    """Regression for: 'order 50' then 'actually 30' recorded BOTH sales (80 units)."""
+    orch, csa = fresh()
+    item, mn, price = stocked(100)
+    answers = iter([f"Actually I only need 30 {item}."])
+    reply, ctx = go(csa, orch, f"I need 50 {item} by 2025-04-10", rid=7, followup=lambda r, i: next(answers, None))
+    sales = rows(item, "sales")
+    assert len(sales) == 1 and float(sales.units.iloc[0]) == 50, sales
+    assert "already ordered under this request" in reply and "colleague will help change the quantity" in reply, reply
+    assert ctx.decisions[item]["reason"] == "already_ordered_other_quantity"
+
+
+@test
+def follow_up_for_a_different_item_is_still_ordered():
+    orch, csa = fresh()
+    a = stocked(60)[0]
+    b = next(n for n in inv().item_name if n != a and stock(n, "2025-04-01") >= 25)
+    answers = iter([f"Also 20 {b} please."])
+    reply, ctx = go(csa, orch, f"I need 50 {a} by 2025-04-10", rid=8, followup=lambda r, i: next(answers, None))
+    assert len(rows(a, "sales")) == 1 and len(rows(b, "sales")) == 1, (rows(a, "sales"), rows(b, "sales"))
+    assert ctx.orders[b]["status"] == "confirmed"
+
+
+@test
 def cash_in_conn_matches_starter_get_cash_balance():
     orch, csa = fresh()
     item, mn, price = stocked(50)
