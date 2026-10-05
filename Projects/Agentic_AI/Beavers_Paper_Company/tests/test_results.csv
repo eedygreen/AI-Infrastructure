@@ -1,0 +1,120 @@
+request_id,request_date,cash_balance,inventory_value,response
+1,2025-04-01,45072.77,4935.449999999999,"Thank you for your request (reference #1).
+- 200 x A4 paper: $12.35, 5% bulk discount | CONFIRMED, delivery by 2025-04-01
+- 100 x Cardstock: $18.52, 5% bulk discount | CONFIRMED, delivery by 2025-04-01
+- 100 x Colored paper: $12.35, 5% bulk discount | CONFIRMED, delivery by 2025-04-01
+Quote total: $43.22
+Order total confirmed: $43.22"
+2,2025-04-03,45139.02,4885.45,"Thank you for your request (reference #2).
+We could not match these to products we sell: balloons.
+- 500 x Colored paper: $61.75, 5% bulk discount | CONFIRMED, delivery by 2025-04-03
+- 300 x Party streamers: $19.50 | CONFIRMED, delivery by 2025-04-07
+Quote total: $81.25
+Order total confirmed: $81.25"
+3,2025-04-04,45289.02,4885.45,"Thank you for your request (reference #3).
+We could not match these to products we sell: A3 paper; A4 paper; printer paper.
+- 10,000 x A4 paper: $650.00 | CONFIRMED, delivery by 2025-04-11
+Quote total: $650.00
+Order total confirmed: $650.00"
+4,2025-04-05,45290.61,4909.699999999999,"Thank you for your request (reference #4).
+- 500 x Cardstock: $97.50 | CONFIRMED, delivery by 2025-04-05
+- 250 x A4 paper: $15.84, 2.5% bulk discount | CONFIRMED, delivery by 2025-04-05
+Quote total: $113.34
+Order total confirmed: $113.34"
+5,2025-04-05,45309.95,4917.399999999999,"Thank you for your request (reference #5).
+We could not match these to products we sell: decorative washi tape.
+- 500 x Colored paper: $65.00 | CONFIRMED (already placed), delivery by 2025-04-09
+- 300 x Cardstock: $57.04 | CONFIRMED (already placed), delivery by 2025-04-05
+Quote total: $122.04
+Order total confirmed: $122.04"
+6,2025-04-06,45362.06999999999,4887.4,"Thank you for your request (reference #6).
+- 500 x Construction paper: $45.50 | CONFIRMED, delivery by 2025-04-10
+- 200 x Cardstock: $38.02, 2.5% bulk discount | CONFIRMED, delivery by 2025-04-06
+- 300 x Standard copy paper: $15.60 | CONFIRMED, delivery by 2025-04-10
+Quote total: $99.12
+Order total confirmed: $99.12"
+7,2025-04-07,45785.97,4617.0,"Thank you for your request (reference #7).
+- 500 x Glossy paper: $117.00 | CONFIRMED (already placed), delivery by 2025-04-07
+- 200 x Heavyweight paper: $52.00 | CONFIRMED (already placed), delivery by 2025-04-11
+- 1,000 x Matte paper: $234.00 | CONFIRMED (already placed), delivery by 2025-04-11
+- 300 x Large poster paper (24x36 inches): $370.50 | CONFIRMED (already placed), delivery by 2025-04-07
+Quote total: $773.50
+Order total confirmed: $773.50"
+8,2025-04-07,46025.97,4517.0,"Thank you for your request (reference #8).
+We could not match these to products we sell: A5 colored paper.
+- 500 x Glossy paper: $117.00 | CONFIRMED (already placed), delivery by 2025-04-07
+- 500 x Matte paper: $117.00 | CONFIRMED (already placed), delivery by 2025-04-11
+- 4,000 x Recycled paper: $416.00 | CONFIRMED (already placed), delivery by 2025-04-14
+Quote total: $650.00
+Order total confirmed: $650.00"
+9,2025-04-07,46038.64,4507.0,"Thank you for your request (reference #9).
+We could not match these to products we sell: 100 sheets of A3 glossy paper; 50 packets of 100% recycled kraft paper envelopes; Glossy paper; Kraft paper.
+- 200 x A4 paper: $12.67, 2.5% bulk discount | CONFIRMED, delivery by 2025-04-07
+Quote total: $12.67
+Order total confirmed: $12.67"
+10,2025-04-08,46038.91,4506.8,"Thank you for your request (reference #10).
+- 1 x A4 paper: $0.07 | CONFIRMED, delivery by 2025-04-08
+- 1 x Cardstock: $0.20 | CONFIRMED, delivery by 2025-04-08
+Quote total: $0.27
+Order total confirmed: $0.27"
+11,2025-04-08,45976.810000000005,4581.95,"Thank you for your request (reference #11).
+- 200 x Cardstock: $37.05 | CONFIRMED (already placed), delivery by 2025-04-08
+- 500 x Standard copy paper: $26.00 | CONFIRMED (already placed), delivery by 2025-04-12
+Quote total: $63.05
+Order total confirmed: $63.05"
+12,2025-04-08,45962.380000000005,4636.95,"Thank you for your request (reference #12).
+- 500 x Glossy paper: $130.00 | CONFIRMED, delivery by 2025-04-12
+- 300 x Cardstock: $55.57, 5% bulk discount | CONFIRMED, delivery by 2025-04-08
+Quote total: $185.57
+Order total confirmed: $185.57"
+13,2025-04-08,46102.08,4536.95,"Thank you for your request (reference #13).
+- 500 x Glossy paper: $123.50, 5% bulk discount | CONFIRMED, delivery by 2025-04-08
+- 300 x Matte paper: $70.20 | CONFIRMED, delivery by 2025-04-12
+Quote total: $193.70
+Order total confirmed: $193.70"
+14,2025-04-09,46079.58,4581.95,"Thank you for your request (reference #14).
+- 5,000 x A4 paper: $325.00 | NOT FULFILLED: we cannot deliver by your requested date (earliest delivery 2025-04-16)
+- 2,000 x Poster paper: $650.00 | NOT FULFILLED: we cannot deliver by your requested date (earliest delivery 2025-04-16)
+- 500 x Cardstock: $97.50 | CONFIRMED, delivery by 2025-04-10
+Quote total: $1,072.50
+Order total confirmed: $97.50"
+15,2025-04-12,46079.58,4581.95,"Thank you for your request (reference #15).
+We could not match these to products we sell: cardboard.
+- 10,000 x A4 paper: $650.00 | NOT FULFILLED: we cannot deliver by your requested date (earliest delivery 2025-04-19)
+- 5,000 x Colored paper: $650.00 | NOT FULFILLED: we cannot deliver by your requested date (earliest delivery 2025-04-19)
+- 500,000 x Cardstock: $97,500.00 | NOT FULFILLED: we cannot deliver by your requested date (earliest delivery 2025-04-19)
+Quote total: $98,800.00"
+16,2025-04-13,46079.75,4581.9,"Thank you for your request (reference #16).
+We could not match these to products we sell: poster board.
+- 1 x A4 paper: $0.07 | CONFIRMED, delivery by 2025-04-13
+- 1 x Construction paper: $0.09 | CONFIRMED, delivery by 2025-04-13
+- 1 x Poster paper: $0.33 | CONFIRMED, delivery by 2025-04-13
+Quote total: $0.49
+Order total confirmed: $0.49"
+17,2025-04-14,46080.20999999999,4581.599999999999,"Thank you for your request (reference #17).
+We could not match these to products we sell: 500 sheets of A3 colored paper (assorted colors); 2000 table napkins (white); 1000 paper cups (biodegradable); 500 paper plates (biodegradable).
+- 2 x A4 paper: $0.13 | CONFIRMED, delivery by 2025-04-14
+- 1 x Colored paper: $0.13 | CONFIRMED, delivery by 2025-04-14
+- 4 x Paper napkins: $0.10 | CONFIRMED, delivery by 2025-04-14
+- 2 x Paper cups: $0.21 | CONFIRMED, delivery by 2025-04-14
+- 1 x Paper plates: $0.13 | CONFIRMED, delivery by 2025-04-14
+Quote total: $0.70
+Order total confirmed: $0.70"
+18,2025-04-14,46192.659999999996,4486.6,"Thank you for your request (reference #18).
+- 500 x Cardstock: $87.75, 10% bulk discount | CONFIRMED, delivery by 2025-04-14
+- 1,000 x Standard copy paper: $52.00 | NOT FULFILLED: we cannot deliver by your requested date (earliest delivery 2025-04-18)
+- 200 x Colored paper: $24.70, 5% bulk discount | CONFIRMED, delivery by 2025-04-14
+Quote total: $164.45
+Order total confirmed: $112.45"
+19,2025-04-15,46162.659999999996,4561.599999999999,"Thank you for your request (reference #19).
+- 2,000 x Glossy paper: $520.00 | NOT FULFILLED: we cannot deliver by your requested date (earliest delivery 2025-04-22)
+- 1,500 x Matte paper: $351.00 | NOT FULFILLED: we cannot deliver by your requested date (earliest delivery 2025-04-22)
+- 1,000 x Cardstock: $195.00 | CONFIRMED, delivery by 2025-04-19
+Quote total: $1,066.00
+Order total confirmed: $195.00"
+20,2025-04-17,46537.659999999996,4561.599999999999,"Thank you for your request (reference #20).
+We could not match these to products we sell: tickets.
+- 5,000 x Flyers: $975.00 | CONFIRMED, delivery by 2025-04-24
+- 2,000 x Poster paper: $650.00 | CONFIRMED, delivery by 2025-04-24
+Quote total: $1,625.00
+Order total confirmed: $1,625.00"
