@@ -1,4 +1,4 @@
-"""Catalog, atomic/idempotent writes, and the bounded-retry helper."""
+"""Catalog, once-only (idempotent) writes through the starter's create_transaction, and the retry helper."""
 
 import json
 import threading
@@ -8,16 +8,18 @@ from sqlalchemy.sql import text
 from typing import Optional
 
 from lib import config
-from lib.starter_utils import db_engine, paper_supplies
-
+from lib.starter_utils import(
+    db_engine, paper_supplies,
+    create_transaction
+)
 
 CATALOG = {p["item_name"]: p for p in paper_supplies}
 WRITE_LOCK = threading.RLock()   # single-process writer lock (SQLite is single-writer anyway)
 
 
 # ---------------------------------------------------------------------------
-# Database layer: atomic, idempotent writes (the starter's create_transaction is
-# not atomic with a stock check and cannot carry an idempotency key)
+# Database layer: once-only writes. The row itself is written by the starter's create_transaction;
+# an idempotency key, with a "started" marker, makes a repeated write recognisable.
 # ---------------------------------------------------------------------------
 def ensure_runtime_tables(reset: bool = False) -> None:
     with db_engine.begin() as conn:
@@ -29,6 +31,9 @@ def ensure_runtime_tables(reset: bool = False) -> None:
             "key TEXT PRIMARY KEY, kind TEXT, transaction_id INTEGER, "
             "result TEXT, created_at TEXT)"
         ))
+        existing = {row._mapping["name"] for row in conn.execute(text("PRAGMA table_info(idempotency_keys)"))}
+        if "before_rowid" not in existing:          # a database made before this column existed
+            conn.execute(text("ALTER TABLE idempotency_keys ADD COLUMN before_rowid INTEGER"))  
         conn.execute(text("CREATE TABLE IF NOT EXISTS run_state (id INTEGER PRIMARY KEY, run_id TEXT)"))
 
 
@@ -73,35 +78,65 @@ def _cash_in_conn(conn, as_of_date: str) -> float:
     return float(value or 0.0)
 
 def _commit_transaction(*, key: str, kind: str, item_name: str, transaction_type: str,
-                        units: int, price: float, date: str, guard, meta: Optional[dict] = None) -> dict:
-    """One DB transaction: replay-if-seen -> guard -> insert -> remember key.
+                        units: int, price: float, date: str, guard, meta: Optional[dict] = None,
+                        writer=create_transaction) -> dict:
+    """Record one purchase or sale exactly once. The row itself is written by the starter's create_transaction.
 
-    guard(conn) returns None to proceed, or a reason string to deny (nothing is written).
+    The steps run under a process-wide lock, each in its own short database transaction:
+      1. Look the key up.
+           - finished before: return the stored result again (a replay);
+           - started but never finished (a crash, or a failed write): look for the row that attempt wrote and
+             adopt it, or write it now;
+           - new: run guard(conn) (a reason string means "refuse", and nothing is written), then note the key
+             as started, together with the last row id seen.
+      2. Write the row with `writer`.
+      3. Store the result against the key.
+    A crash between steps 2 and 3 therefore cannot make a repeat write the row twice.
     """
     if transaction_type not in {"stock_orders", "sales"}:
         raise ValueError("transaction_type must be 'stock_orders' or 'sales'")
-    with WRITE_LOCK, db_engine.begin() as conn:
-        previous = conn.execute(
-            text("SELECT result FROM idempotency_keys WHERE key = :k"), {"k": key}
-        ).scalar()
-        if previous is not None:
-            result = json.loads(previous)
-            result["replayed"] = True
-            return result
-        denial = guard(conn)
-        if denial:
-            return {"status": "denied", "reason": denial}
-        inserted = conn.execute(text(
-            "INSERT INTO transactions (item_name, transaction_type, units, price, transaction_date) "
-            "VALUES (:item_name, :transaction_type, :units, :price, :date)"
-        ), {"item_name": item_name, "transaction_type": transaction_type,
-            "units": int(units), "price": float(price), "date": date})
-        result = {"status": "committed", "transaction_id": int(inserted.lastrowid), **(meta or {})}
-        conn.execute(text(
-            "INSERT INTO idempotency_keys (key, kind, transaction_id, result, created_at) "
-            "VALUES (:k, :kind, :tx, :result, :created)"
-        ), {"k": key, "kind": kind, "tx": result["transaction_id"],
-            "result": json.dumps(result), "created": datetime.now().isoformat()})
+    with WRITE_LOCK:
+        adopted_row = None
+        with db_engine.begin() as conn:
+            stored = conn.execute(
+                text("SELECT result FROM idempotency_keys WHERE key = :k"), {"k": key}).scalar()
+            if stored is not None:
+                result = json.loads(stored)
+                result["replayed"] = True
+                return result
+            started = conn.execute(
+                text("SELECT COUNT(*) FROM idempotency_keys WHERE key = :k"), {"k": key}).scalar()
+            if started:
+                before = conn.execute(
+                    text("SELECT before_rowid FROM idempotency_keys WHERE key = :k"), {"k": key}).scalar()
+                adopted_row = conn.execute(text(
+                    "SELECT MIN(rowid) FROM transactions WHERE rowid > :before AND item_name = :item "
+                    "AND transaction_type = :type AND units = :units AND ABS(price - :price) < 0.005 "
+                    "AND transaction_date = :date"
+                ), {"before": before, "item": item_name, "type": transaction_type, "units": int(units),
+                    "price": float(price), "date": date}).scalar()
+            else:
+                denial = guard(conn)
+                if denial:
+                    return {"status": "denied", "reason": denial}
+                before = conn.execute(text("SELECT COALESCE(MAX(rowid), 0) FROM transactions")).scalar()
+                conn.execute(text(
+                    "INSERT INTO idempotency_keys (key, kind, before_rowid, created_at) "
+                    "VALUES (:k, :kind, :before, :created)"
+                ), {"k": key, "kind": kind, "before": before, "created": datetime.now().isoformat()})
+        if adopted_row is None:
+            writer(item_name=item_name, transaction_type=transaction_type, quantity=int(units),
+                   price=float(price), date=date)
+        with db_engine.begin() as conn:
+            # create_transaction's own return value comes from last_insert_rowid() on a different
+            # connection, so it can be 0. The newest row, under our lock, is the one just written.
+            transaction_id = adopted_row if adopted_row is not None else conn.execute(
+                text("SELECT MAX(rowid) FROM transactions")).scalar()
+            result = {"status": "committed", "transaction_id": int(transaction_id), **(meta or {})}
+            conn.execute(text("UPDATE idempotency_keys SET transaction_id = :tx, result = :result WHERE key = :k"),
+                         {"tx": result["transaction_id"], "result": json.dumps(result), "k": key})
+        if adopted_row is not None:
+            result["replayed"] = True       # an earlier attempt already wrote it
         return result
 
 def _retry(fn, attempts: Optional[int] = None, base: Optional[float] = None):
