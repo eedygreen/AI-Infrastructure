@@ -426,7 +426,7 @@ class CustomerSupportAgent(SpecialistAgent):
             except Exception as exc:  # noqa: BLE001
                 last_error = f"{type(exc).__name__}: {exc}"
             ctx.log(f"categorize attempt {attempt + 1} failed: {last_error}")
-        return ParsedRequest(raw=raw, needed_by=None, intents=[], lines=[], unmatched=[raw[:80]])
+        return ParsedRequest(raw=raw, needed_by=None, intents=[], lines=[], unmatched=[raw[:80]], failed=True)
 
     def handle(self, raw_request: str, request_date: str, request_id: int,
                followup: Optional[Callable[[str, int], Optional[str]]] = None) -> str:
