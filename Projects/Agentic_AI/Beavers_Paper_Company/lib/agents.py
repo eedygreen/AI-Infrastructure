@@ -177,6 +177,7 @@ CUSTOMER_REASONS = {
     "write failed": "we hit a temporary system problem",
     "no_quote": "we could not price this item right now",
     "deadline_unconfirmed": "please confirm the delivery date you need so we can check supplier timing",
+    "already_ordered_other_quantity": "this item is already ordered under this request, so a colleague will help change the quantity",
     "held_partial": "it was held because another item in your order could not be fulfilled",
 }
 
@@ -266,6 +267,12 @@ class OrchestratorAgent:
                                                  "delivery_date": ctx.orders[line.item_name]["delivery_date"]}
                 ctx.log(f"{line.item_name}: already ordered earlier, reporting existing order")
                 continue
+            other = self._other_quantity_sold(ctx, line)
+            if other is not None:                       # a follow-up changed the quantity of an item already sold: never sell it twice
+                ctx.decisions[line.item_name] = {"action": "skip",
+                                                 "reason": "write failed" if other < 0 else "already_ordered_other_quantity"}
+                ctx.log(f"{line.item_name}: not placing a second other (already sold this request: {other})")
+                continue
             decision = decide_fulfillment(ctx.request_date, ctx.parsed.needed_by, ctx.stock.get(line.item_name),
                                           bool(ctx.parsed.deadline_unconfirmed))
             if decision["action"] != "skip" and line.item_name not in ctx.quotes:
@@ -311,6 +318,23 @@ class OrchestratorAgent:
         except Exception as exc:  # noqa: BLE001 - fall through to the normal (idempotent) path
             ctx.log(f"prior-sale lookup failed for {line.item_name}: {exc}")
             return None
+
+    @staticmethod
+    def _other_quantity_sold(ctx: RequestContext, line: LineItem) -> Optional[int]:
+        """Quantity already sold for this item under this request when it differs from the one asked for now.
+        Returns None if there is no such sale, and -1 if the lookup itself failed (callers must then fail closed)."""
+        same = ctx.key("sale", line.item_name, line.quantity)
+        prefix = ctx.key("sale", line.item_name, 0)[:-1]       # "<run>:<request>:sale:<item>:", built from ctx.key itself
+        try:
+            with db_engine.connect() as conn:
+                other = conn.execute(
+                    text("SELECT key FROM idempotency_keys WHERE substr(key, 1, :n) = :p AND key <> :same LIMIT 1"),
+                    {"n": len(prefix), "p": prefix, "same": same}).scalar()
+            return int(other[len(prefix):]) if other else None
+        except Exception as exc:  # noqa: BLE001
+            ctx.log(f"other-quantity lookup failed for {line.item_name}: {exc}")
+            return -1
+
 
     # -- Synthesis: template-rendered, so internal data cannot leak ---------------
     def render(self, ctx: RequestContext, needs: set) -> str:
