@@ -190,7 +190,7 @@ def make_quote_pricing_tools(ctx: RequestContext) -> list:
         out = {}
         for line in ctx.parsed.lines:
             shortfall = ctx.stock.get(line.item_name, {}).get("shortfall", 0)
-            cap = discount_cap(line.quantity, shortfall, line.item_name in high_demand)
+            cap = discount_cap(line.quantity, shortfall, (not report_ok) or line.item_name in high_demand)
             recommended = min(cap, hint) if hint is not None else cap
             ctx.pricing_ctx[line.item_name] = {"cap": cap, "recommended": recommended}
             out[line.item_name] = {
