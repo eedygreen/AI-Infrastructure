@@ -82,7 +82,7 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resu
         quote_requests_sample.dropna(subset=["request_date"], inplace=True)
         quote_requests_sample = quote_requests_sample.sort_values("request_date")
     except Exception as e:
-        print(f"FATAL: Error loading test data: {e}")
+        logger.error(f"FATAL: Error loading test data: {e}")
         return
 
     all_requests = quote_requests_sample            # the full, date-ordered list: --resume checks the saved rows against it
@@ -100,7 +100,7 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resu
         save_run_id(run_id=run_id)
         finished = []
     else:
-        logger.info("Resuming run %s after request %s". run_id, len(finished))
+        logger.info("Resuming run %s after request %s", run_id, len(finished))
         logger.info(f"Resumging run {run_id}: requests 1 to {len(finished)} are already done.")
         ensure_runtime_tables()
 
@@ -135,11 +135,11 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resu
 
         request_date = row["request_date"].strftime("%Y-%m-%d")
 
-        print(f"\n=== Request {request_number} ===")
-        print(f"Context: {row['job']} organizing {row['event']}")
-        print(f"Request Date: {request_date}")
-        print(f"Cash Balance: ${current_cash:.2f}")
-        print(f"Inventory Value: ${current_inventory:.2f}")
+        logger.info(f"\n=== Request {request_number} ===")
+        logger.info(f"Context: {row['job']} organizing {row['event']}")
+        logger.info(f"Request Date: {request_date}")
+        logger.info(f"Cash Balance: ${current_cash:.2f}")
+        logger.info(f"Inventory Value: ${current_inventory:.2f}")
 
         # Process request
         request_with_date = f"{row['request']} (Date of request: {request_date})"
@@ -156,19 +156,15 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resu
         # A rejected key or an unreachable model fails EVERY request the same way: stop instead of writing a run of apologies.
         parse_failures_in_a_row = parse_failures_in_a_row + 1 if parse_failed else 0
         stop_run = parse_failures_in_a_row >= config.MAX_CONSECUTIVE_PARSE_FAILURES
-        _save_results(results=results)
-        if stop_run:
-            raise SystemExit(f"Stopping: {parse_failures_in_a_row} requests in a row could not be understood because "
-                             "the model call failed. Check OPENAI_API_KEY and network access, then rerun." 
-                             "Results so far were saved to test_results.csv")
+
         # Update state
         report = generate_financial_report(request_date)
         current_cash = report["cash_balance"]
         current_inventory = report["inventory_value"]
 
-        print(f"Response: {response}")
-        print(f"Updated Cash: ${current_cash:.2f}")
-        print(f"Updated Inventory: ${current_inventory:.2f}")
+        logger.info(f"Response: {response}")
+        logger.info(f"Updated Cash: ${current_cash:.2f}")
+        logger.info(f"Updated Inventory: ${current_inventory:.2f}")
 
         results.append(
             {
@@ -179,17 +175,20 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resu
                 "response": response,
             }
         )
-
+        # Save results
+        _save_results(results=results)
+        if stop_run:
+            raise SystemExit(f"Stopping: {parse_failures_in_a_row} requests in a row could not be understood because "
+                             "the model call failed. Check OPENAI_API_KEY and network access, then rerun. "
+                             "Results so far were saved to test_results.csv")
         if not no_sleep:
             time.sleep(1)
 
     # Final report
     final_date = quote_requests_sample["request_date"].max().strftime("%Y-%m-%d")
     final_report = generate_financial_report(final_date)
-    print("\n===== FINAL FINANCIAL REPORT =====")
-    print(f"Final Cash: ${final_report['cash_balance']:.2f}")
-    print(f"Final Inventory: ${final_report['inventory_value']:.2f}")
+    logger.info("\n===== FINAL FINANCIAL REPORT =====")
+    logger.info(f"Final Cash: ${final_report['cash_balance']:.2f}")
+    logger.info(f"Final Inventory: ${final_report['inventory_value']:.2f}")
 
-    # Save results
-    _save_results(results=results)
     return results
