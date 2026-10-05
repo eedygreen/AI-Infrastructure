@@ -316,6 +316,10 @@ class OrchestratorAgent:
     def render(self, ctx: RequestContext, needs: set) -> str:
         p = ctx.parsed
         out = [f"Thank you for your request (reference #{ctx.request_id})."]
+        if p.failed:
+            out.append("We could not process your message because of a temporary problem on our side. "
+                "Please try again in a few minutes.")
+            return "\n".join(out)
         if p.unmatched:
             out.append("We could not match these to products we sell: " + "; ".join(p.unmatched) + ".")
         if p.deadline_unconfirmed:
