@@ -4,7 +4,7 @@ scripted policy that tests can sabotage via HOOKS."""
 import inspect, json, re, threading
 
 HOOKS = {"fail": {}, "skip": {}, "discount": None, "calls": [], "lock": threading.Lock(), "delay": {},
-         "last_task": {}, "parse_garbage": False, "parse_via_final_answer": False}
+         "last_task": {}, "parse_garbage": False, "parse_via_final_answer": False, "parse_quantity_divisor": None}
 
 class StubTool:
     def __init__(self, func): self.func, self.name = func, func.__name__
@@ -92,6 +92,8 @@ def _fake_parse(task):
         if m:
             q = int(m.group(1).replace(",", ""))
             if m.group(2) and m.group(2).lower().startswith("ream"): q *= 500
+            divisor = HOOKS["parse_quantity_divisor"]
+            if divisor and q >= divisor: q = max(1, q // divisor)      # imitate the real mistake: 500 sheets read as 1 ream
             lines.append({"item_name": name, "quantity": q})
     if "unobtainium" in msg.lower(): unmatched.append("unobtainium")
     nb = re.search(r"by (\d{4}-\d{2}-\d{2})", msg)
