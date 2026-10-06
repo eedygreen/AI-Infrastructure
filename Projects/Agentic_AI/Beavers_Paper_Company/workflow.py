@@ -148,8 +148,8 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resu
             response = customer_agent.handle(request_with_date, request_date, request_number)
             parse_failed = customer_agent.last_ctx.parsed.failed
         except Exception as e:
-            logger.error("request %s crashed", request_number)
-            response = f"{CRASH_MESSAGE}({type(e).__name__})."
+            logger.error("request %s crashed: %s: %s", request_number, type(e).__name__, e)   # the detail goes to the log
+            response = f"{CRASH_MESSAGE}."
             parse_failed = False
         orchestrator.drain_background()     # test harness only: keep the books determinstic
 
