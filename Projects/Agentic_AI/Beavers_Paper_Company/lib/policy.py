@@ -14,6 +14,7 @@ from lib.models import LineItem, ParsedRequest
 # Pure policy functions (no I/O: unit-testable)
 # ---------------------------------------------------------------------------
 def list_unit_price(unit_price: float) -> float:
+    """The list price of one unit: its cost plus the markup."""
     return unit_price * (1 + config.LIST_MARKUP)
 
 
@@ -60,6 +61,7 @@ _DISCOUNT_PATTERNS = [
 ]
 
 def extract_discount_hint(text_value: str) -> Optional[float]:
+    """The discount a past quote mentions, as a fraction (a 12.5% bulk discount gives 0.125), or None."""
     for pattern in _DISCOUNT_PATTERNS:
         match = pattern.search(text_value or "")
         if match:
@@ -106,16 +108,17 @@ def quantity_appears_in_request(quantity: int, raw: str) -> bool:
     text = raw
     for pattern in _DATE_PATTERNS:
         text = pattern.sub(" ", text)
-    written = {int(n.replace(",", "")) for n in re.findall(r"\d[\d,]*", text) if n.replace(",", "").isdigit()}
+    written = {int(number.replace(",", "")) for number in re.findall(r"\d[\d,]*", text)
+               if number.replace(",", "").isdigit()}
     if re.search(r"\bream", text, re.I):
-        written |= {n * config.SHEETS_PER_REAM for n in written}
+        written |= {number * config.SHEETS_PER_REAM for number in written}
     return quantity in written
 
 def validate_parsed(raw: str, payload: dict, request_date: str) -> ParsedRequest:
     """Never trust the LLM's structure: validate names against the catalog, coerce numbers."""
-    names_lower = {n.lower(): n for n in CATALOG}
+    names_lower = {catalog_name.lower(): catalog_name for catalog_name in CATALOG}
     merged: Dict[str, int] = {}
-    unmatched = [str(u) for u in (payload.get("unmatched") or [])]
+    unmatched = [str(product) for product in (payload.get("unmatched") or [])]
     unclear: List[str] = []                   # items whose quantity cannot be traced to the customer's words
     for entry in payload.get("lines") or []:
         raw_name = str((entry or {}).get("item_name", "")).strip()
@@ -141,12 +144,12 @@ def validate_parsed(raw: str, payload: dict, request_date: str) -> ParsedRequest
     deadline_unconfirmed = None
     if needed_by and needed_by < request_date:
         deadline_unconfirmed, needed_by = needed_by, None
-    intents = [i for i in (payload.get("intents") or []) if i in {"inventory", "quote", "order"}]
+    intents = [intent for intent in (payload.get("intents") or []) if intent in {"inventory", "quote", "order"}]
     if not intents:
         intents = ["quote"]   # ambiguous -> the recoverable choice (a wrong order is a side effect)
     return ParsedRequest(
         raw=raw, needed_by=needed_by, intents=intents,
-        lines=[LineItem(n, q) for n, q in merged.items()],
+        lines=[LineItem(item_name, quantity) for item_name, quantity in merged.items()],
         unmatched=unmatched, unclear_quantity=unclear, notes=str(payload.get("notes") or ""),
         deadline_unconfirmed=deadline_unconfirmed,
     )
