@@ -13,7 +13,7 @@ from lib.starter_utils import(
     create_transaction
 )
 
-CATALOG = {p["item_name"]: p for p in paper_supplies}
+CATALOG = {product["item_name"]: product for product in paper_supplies}
 WRITE_LOCK = threading.RLock()   # single-process writer lock (SQLite is single-writer anyway)
 
 
@@ -22,6 +22,9 @@ WRITE_LOCK = threading.RLock()   # single-process writer lock (SQLite is single-
 # an idempotency key, with a "started" marker, makes a repeated write recognisable.
 # ---------------------------------------------------------------------------
 def ensure_runtime_tables(reset: bool = False) -> None:
+    """Create the two tables this project adds to the starter database: idempotency_keys (one row per
+    write) and run_state (the run id). `reset=True` empties them first. A table made before the
+    before_rowid column existed is upgraded in place."""
     with db_engine.begin() as conn:
         if reset:
             conn.execute(text("DROP TABLE IF EXISTS idempotency_keys"))
@@ -52,6 +55,8 @@ def load_run_id() -> Optional[str]:
         return None
 
 def _stock_in_conn(conn, item_name: str, as_of_date: str) -> int:
+    """Stock of one item as of a date, read through the caller's connection (stock orders add, sales
+    subtract)."""
     value = conn.execute(text("""
         SELECT COALESCE(SUM(CASE
             WHEN transaction_type = 'stock_orders' THEN units
@@ -144,11 +149,11 @@ def _retry(fn, attempts: Optional[int] = None, base: Optional[float] = None):
     attempts = config.DB_RETRIES if attempts is None else attempts   # read at call time so knobs are tunable
     base = config.BACKOFF_S if base is None else base
     last = None
-    for i in range(attempts):
+    for attempt_number in range(attempts):
         try:
             return fn()
         except Exception as exc:  # noqa: BLE001 - deliberately broad at an I/O boundary
             last = exc
-            if i < attempts - 1:
-                time.sleep(base * (2 ** i))
+            if attempt_number < attempts - 1:
+                time.sleep(base * (2 ** attempt_number))
     raise last
