@@ -33,6 +33,7 @@ def get_model():
 # Agent plumbing
 # ---------------------------------------------------------------------------
 def build_agent(name: str, description: str, tools: list) -> ToolCallingAgent:
+    """Build one smolagents agent that may use only the tools it is given."""
     return ToolCallingAgent(
         tools=tools,
         model=get_model(),
@@ -58,31 +59,32 @@ def run_until_covered(ctx: RequestContext, label: str, attempt, missing) -> bool
     `attempt(todo)` performs ONE specialist pass.
     `missing()` inspects the ledger, so an LLM that skips a tool or crashes mid-run is re-run for only the lines still missing.
     Args:
-        ctx (RequesteContext): request context
-        label ():
-        attempt: No of tried
-        missing: the skipped
+        ctx: the request context (used for logging).
+        label: a short name for this step, used in log messages.
+        attempt: runs ONE specialist pass over the lines still missing.
+        missing: returns the lines the ledger does not cover yet.
 
-    Return:
-        True or False
+    Returns:
+        True if the ledger now covers every line, False if some are still missing.
     """
-    for n in range(config.AGENT_RETRIES + 1):
+    for pass_number in range(config.AGENT_RETRIES + 1):
         todo = missing()
         if not todo:
             return True
         try:
             attempt(todo)
         except Exception as exc:  # noqa: BLE001
-            ctx.log(f"{label} attempt {n + 1} failed: {type(exc).__name__}: {exc}")
-        time.sleep(config.BACKOFF_S * n)
+            ctx.log(f"{label} attempt {pass_number + 1} failed: {type(exc).__name__}: {exc}")
+        time.sleep(config.BACKOFF_S * pass_number)
     still = missing()
     if still:
-        ctx.log(f"{label} incomplete after retries: {[l.item_name for l in still]}")
+        ctx.log(f"{label} incomplete after retries: {[line.item_name for line in still]}")
     return not still
 
 
 def lines_json(lines: List[LineItem]) -> str:
-    return json.dumps([{"item_name": l.item_name, "quantity": l.quantity} for l in lines])
+    """The request's items as JSON text, ready to put in a task prompt."""
+    return json.dumps([{"item_name": line.item_name, "quantity": line.quantity} for line in lines])
 
 
 class SpecialistAgent:
@@ -93,6 +95,7 @@ class SpecialistAgent:
     description: str = ""
 
     def _run(self, tools: list, task: str):
+        """Run one delegated task: a fresh agent that holds only the given tools, with a time limit."""
         return run_agent(build_agent(self.role, self.description, tools), task)
 
 
@@ -100,6 +103,10 @@ class SpecialistAgent:
 # InventoryAgent  (plan: stock + supplier ETA reads, guarded restock, replenishment)
 # ---------------------------------------------------------------------------
 class InventoryAgent(SpecialistAgent):
+    """Stock, supplier delivery dates, and buying stock. It never records sales.
+
+    It has three tool sets: read-only checks, one tool that buys stock for an approved order, and the
+    routine replenishment tools. Each task gets only the set it needs."""
     role = "inventory_agent"
     description = "Checks stock and supplier lead times, buys missing stock, keeps stock above reorder points."
 
@@ -130,6 +137,8 @@ class InventoryAgent(SpecialistAgent):
 # QuoteAgent  (plan: quote history prefetch, then pricing with bulk discounts)
 # ---------------------------------------------------------------------------
 class QuoteAgent(SpecialistAgent):
+    """Prices a request. It looks up similar past quotes, then prices each item within the discount and
+    margin limits. It never touches stock or sales."""
     role = "quote_agent"
     description = "Looks up similar past quotes and prices request lines with strategic bulk discounts."
 
@@ -153,6 +162,7 @@ class QuoteAgent(SpecialistAgent):
 # OrderAgent  (plan: finalize sales; the only agent that writes a sale)
 # ---------------------------------------------------------------------------
 class OrderAgent(SpecialistAgent):
+    """Records the sale of each approved item. It is the only agent that writes sales."""
     role = "order_agent"
     description = "Finalizes approved sales transactions."
 
@@ -185,6 +195,10 @@ PARSE_FAILED_MESSAGE = ("We could not process your message because of a temporar
                         "Please try again in a few minutes.")
 
 class OrchestratorAgent:
+    """The coordinator: plain code, with no model and no tools of its own.
+
+    It plans, delegates to the three specialist agents, applies the checks that decide what may happen
+    next, writes the customer's reply from the ledger, and starts the background replenishment."""
     def __init__(self, run_id: str, inventory: InventoryAgent, quote: QuoteAgent, order: OrderAgent):
         self.run_id = run_id
         self.inventory, self.quote, self.order = inventory, quote, order
@@ -194,6 +208,8 @@ class OrchestratorAgent:
     # -- Plan ---------------------------------------------------------------
     @staticmethod
     def plan(parsed: ParsedRequest) -> set:
+        """Which kinds of work this request needs. An order also needs a quote and a stock check, and a
+        quote needs a stock check, so the plan adds them even when the customer did not ask."""
         needs = set(parsed.intents)
         if "order" in needs:
             needs |= {"quote", "inventory"}   # an order is only safe with price + stock
@@ -203,13 +219,17 @@ class OrchestratorAgent:
 
     # -- Main entry ----------------------------------------------------------
     def process(self, ctx: RequestContext, parsed: ParsedRequest) -> str:
+        """Handle one parsed request and return the reply text.
+
+        Phase 1 always runs. Phase 2 (pricing) runs when a quote is needed, and Phase 3 (the only phase that
+        changes anything) runs only when an order was asked for."""
         ctx.parsed = parsed
         if not parsed.lines:
             ctx.log("parsing failed (system problem); not blaming the customer" if parsed.failed
                     else "no recognisable items; asking the customer to clarify")
             return self.render(ctx, set())
         needs = self.plan(parsed)
-        ctx.log(f"plan: {sorted(needs)} for {[l.item_name for l in parsed.lines]}")
+        ctx.log(f"plan: {sorted(needs)} for {[line.item_name for line in parsed.lines]}")
         self._phase1(ctx, needs)
         if "quote" in needs:
             self._phase2(ctx)
@@ -219,6 +239,8 @@ class OrchestratorAgent:
 
     # -- Phase 1: independent reads, in parallel ------------------------------
     def _phase1(self, ctx: RequestContext, needs: set) -> None:
+        """Phase 1: the stock check and the quote-history look-up, run at the same time because neither needs
+        the other's answer. Both only look things up."""
         with ThreadPoolExecutor(max_workers=2) as pool:
             jobs = []
             if "inventory" in needs:
@@ -232,11 +254,15 @@ class OrchestratorAgent:
                     ctx.log(f"phase 1 helper crashed: {exc}")
 
     def _inventory_check(self, ctx: RequestContext) -> bool:
+        """Ask the InventoryAgent about every item, repeating only for items the ledger still lacks.
+        Returns True when every item is covered."""
         return run_until_covered(
             ctx, "inventory check", lambda todo: self.inventory.check_stock(ctx, todo),
-            lambda: [l for l in ctx.parsed.lines if l.item_name not in ctx.stock])
+            lambda: [line for line in ctx.parsed.lines if line.item_name not in ctx.stock])
 
     def _history_prefetch(self, ctx: RequestContext) -> bool:
+        """Look up similar past quotes. This is advisory: a failure is logged and the request carries on
+        without history. Returns True on success."""
         try:
             self.quote.prefetch_history(ctx)
         except Exception as exc:  # noqa: BLE001
@@ -246,18 +272,25 @@ class OrchestratorAgent:
 
     # -- Phase 2: pricing (needs Phase 1) --------------------------------------
     def _phase2(self, ctx: RequestContext) -> None:
-        priceable = [l for l in ctx.parsed.lines
-                     if ctx.stock.get(l.item_name) and not ctx.stock[l.item_name].get("error")]
+        """Phase 2: price the items whose stock position is known. Items with unknown availability are not
+        priced."""
+        priceable = [line for line in ctx.parsed.lines
+                     if ctx.stock.get(line.item_name) and not ctx.stock[line.item_name].get("error")]
         if not priceable:
             ctx.log("phase 2 skipped: no line has verified availability")
             return
 
         run_until_covered(
             ctx, "pricing", lambda todo: self.quote.price(ctx, todo),
-            lambda: [l for l in priceable if l.item_name not in ctx.quotes])
+            lambda: [line for line in priceable if line.item_name not in ctx.quotes])
 
     # -- Phase 3: side effects, gated --------------------------------------------
     def _phase3(self, ctx: RequestContext) -> None:
+        """Phase 3, the only place anything is changed.
+
+        For each item decide: ship, restock then ship, or skip. Buy stock for the items that need it, then
+        record the sales. A skipped item changes nothing, and an item already sold under this request is
+        reported, never sold twice."""
         lines = ctx.parsed.lines
         for line in lines:
             prior = self._prior_sale(ctx, line)
@@ -283,24 +316,24 @@ class OrchestratorAgent:
 
         if not config.ALLOW_PARTIAL_FULFILLMENT and (
                 ctx.parsed.unmatched or ctx.parsed.unclear_quantity
-                or any(d["action"] == "skip" for d in ctx.decisions.values())):
-            for name, d in ctx.decisions.items():
-                if d["action"] != "skip":
+                or any(item_decision["action"] == "skip" for item_decision in ctx.decisions.values())):
+            for name, item_decision in ctx.decisions.items():
+                if item_decision["action"] != "skip":
                     ctx.decisions[name] = {"action": "skip", "reason": "held_partial"}
             ctx.log("all-or-nothing policy: order held, no side effects")
             return
 
-        restock_lines = [l for l in lines if ctx.decisions[l.item_name]["action"] == "restock_then_ship"]
+        restock_lines = [line for line in lines if ctx.decisions[line.item_name]["action"] == "restock_then_ship"]
         if restock_lines:
             run_until_covered(
                 ctx, "restock", lambda todo: self.inventory.restock(ctx, todo),
-                lambda: [l for l in restock_lines if l.item_name not in ctx.restocks])
+                lambda: [line for line in restock_lines if line.item_name not in ctx.restocks])
             for line in restock_lines:
                 outcome = ctx.restocks.get(line.item_name)
                 if not outcome or outcome["status"] != "placed":
                     ctx.decisions[line.item_name] = {"action": "skip", "reason": "restock_denied"}
 
-        approved = [l for l in lines if ctx.decisions[l.item_name]["action"] in {"ship", "restock_then_ship"}]
+        approved = [line for line in lines if ctx.decisions[line.item_name]["action"] in {"ship", "restock_then_ship"}]
         for line in approved:
             ctx.decisions[line.item_name]["approved"] = True
         if not approved:
@@ -309,10 +342,12 @@ class OrchestratorAgent:
 
         run_until_covered(
             ctx, "order", lambda todo: self.order.place_orders(ctx, todo),
-            lambda: [l for l in approved if l.item_name not in ctx.orders])
+            lambda: [line for line in approved if line.item_name not in ctx.orders])
 
     @staticmethod
     def _prior_sale(ctx: RequestContext, line: LineItem) -> Optional[dict]:
+        """The stored result of an earlier sale of exactly this item and quantity under this request, or None.
+        It lets a repeated request report the existing order instead of selling again."""
         try:
             with db_engine.connect() as conn:
                 stored = conn.execute(text("SELECT result FROM idempotency_keys WHERE key = :k"),
@@ -351,26 +386,28 @@ class OrchestratorAgent:
         return ""
 
     def render(self, ctx: RequestContext, needs: set) -> str:
-        p = ctx.parsed
+        """Write the customer's reply from the ledger, using fixed templates, so cash, margins and supplier
+        cost can never reach the customer."""
+        parsed = ctx.parsed
         out = [f"Thank you for your request (reference #{ctx.request_id})."]
-        if p.failed:
+        if parsed.failed:
             out.append(PARSE_FAILED_MESSAGE)
             return "\n".join(out)
-        if p.unmatched:
-            out.append("We could not match these to products we sell: " + "; ".join(p.unmatched) + ".")
-        if p.unclear_quantity:
-            out.append("We were not sure how many you need of: " + "; ".join(p.unclear_quantity)
+        if parsed.unmatched:
+            out.append("We could not match these to products we sell: " + "; ".join(parsed.unmatched) + ".")
+        if parsed.unclear_quantity:
+            out.append("We were not sure how many you need of: " + "; ".join(parsed.unclear_quantity)
                        + ". Please confirm the quantities and we will happily help.")
-        if p.deadline_unconfirmed:
-            out.append(f"The delivery date you gave ({p.deadline_unconfirmed}) is earlier than your request date. "
+        if parsed.deadline_unconfirmed:
+            out.append(f"The delivery date you gave ({parsed.deadline_unconfirmed}) is earlier than your request date. "
                        "Could you confirm the date you need?"
                        + (" Items already in stock are not affected." if "order" in needs else ""))
-        if not p.lines:
+        if not parsed.lines:
             out.append("Please tell us which products and quantities you need and we will happily help.")
             return "\n".join(out)
 
         quoted_total = confirmed_total = 0.0
-        for line in p.lines:
+        for line in parsed.lines:
             stock, quote = ctx.stock.get(line.item_name), ctx.quotes.get(line.item_name)
             decision, order = ctx.decisions.get(line.item_name), ctx.orders.get(line.item_name)
             head = f"- {line.quantity:,} x {line.item_name}"
@@ -413,11 +450,13 @@ class OrchestratorAgent:
         self._pending.append(self._background.submit(self._replenish, ctx))
 
     def _replenish(self, ctx: RequestContext) -> None:
+        """Background job, started after the reply has gone: if any item is below its reorder point, ask the
+        InventoryAgent to top it up. It never affects the customer's outcome."""
         try:
             low = _low_stock_items(ctx.request_date)   # deterministic pre-check: no LLM call if nothing is low
             if not low:
                 return
-            ctx.log(f"replenishment: {[x['item_name'] for x in low]} below reorder point")
+            ctx.log(f"replenishment: {[entry['item_name'] for entry in low]} below reorder point")
             self.inventory.replenish(ctx)
             ctx.log("replenishment report: " + json.dumps(ctx.background))   # logged, never customer-facing
         except Exception as exc:  # noqa: BLE001
@@ -435,6 +474,8 @@ class OrchestratorAgent:
 # CustomerSupportAgent (front door + bounded customer loop)
 # ---------------------------------------------------------------------------
 class CustomerSupportAgent(SpecialistAgent):
+    """The front door. It turns the customer's words into a structured request, hands it to the
+    orchestrator, and runs the bounded customer loop."""
     role = "customer_support_agent"
     description = "Understands customer requests, categorizes them, and runs the bounded customer loop."
 
@@ -443,6 +484,10 @@ class CustomerSupportAgent(SpecialistAgent):
         self.last_ctx: Optional[RequestContext] = None
 
     def categorize(self, ctx: RequestContext, raw: str) -> ParsedRequest:
+        """Turn the customer's message into a ParsedRequest: one model run, then validation.
+
+        It tries once more if the first run fails. If the model cannot be used at all, the request comes back
+        marked `failed`, so the customer is never blamed for a problem on our side."""
         task = (
             "You are CustomerSupportAgent for Munder Difflin Paper Company. Convert the customer message "
             "into structured data.\nRules:\n"
