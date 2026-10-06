@@ -340,6 +340,16 @@ class OrchestratorAgent:
 
 
     # -- Synthesis: template-rendered, so internal data cannot leak ---------------
+    @staticmethod
+    def _discount_note(quote: dict, stock: Optional[dict], quantity: int) -> str:
+        """Say why the price has the discount it has (or none), so the customer is never left guessing."""
+        if quote["discount_applied_pct"]:
+            return f", {quote['discount_applied_pct']:g}% bulk discount"
+        first_discount_quantity = min(minimum for minimum, rate in config.DISCOUNT_TIERS if rate > 0)
+        if (stock or {}).get("shortfall") and quantity >= first_discount_quantity:
+            return ", no bulk discount because we must restock this item"
+        return ""
+
     def render(self, ctx: RequestContext, needs: set) -> str:
         p = ctx.parsed
         out = [f"Thank you for your request (reference #{ctx.request_id})."]
@@ -369,15 +379,16 @@ class OrchestratorAgent:
                 head += f": ${order['total']:,.2f}"                    # the amount already charged
             elif "quote" in needs and quote:
                 quoted_total += quote["line_total"]
-                discount = f", {quote['discount_applied_pct']:g}% bulk discount" if quote["discount_applied_pct"] else ""
-                head += f": ${quote['line_total']:,.2f}{discount}"
+                head += f": ${quote['line_total']:,.2f}{self._discount_note(quote, stock, line.quantity)}"
             elif "quote" in needs:
                 head += ": price unavailable right now"
             if "order" in needs:
                 if order and order["status"] == "confirmed":
                     confirmed_total += order["total"]
+                    restocked = bool(decision and decision.get("action") == "restock_then_ship")
                     head += (" | CONFIRMED" + (" (already placed)" if order.get("replayed") else "")
-                             + f", delivery by {order['delivery_date']}")
+                             + f", delivery by {order['delivery_date']}"
+                             + (" (includes time to restock this item)" if restocked else ""))
                 else:
                     reason = (order or {}).get("reason") or (decision or {}).get("reason") or "no_quote"
                     detail = CUSTOMER_REASONS.get(reason, "we could not complete it right now")
