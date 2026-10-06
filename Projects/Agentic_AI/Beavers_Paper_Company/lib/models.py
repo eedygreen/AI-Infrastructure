@@ -25,6 +25,7 @@ class ParsedRequest:
     notes: str = ""
     deadline_unconfirmed: Optional[str] = None     # a deadline before the request date: flagged, never guessed
     failed: bool = False                           # parsing itself failed (system problem): never blame the customer
+    unclear_quantity: List[str] = field(default_factory=list)   # items whose quantity is not in the customer's own words: we ask, never guess
 
 @dataclass
 class RequestContext:
