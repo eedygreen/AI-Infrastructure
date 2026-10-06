@@ -306,16 +306,16 @@ def make_order_tools(ctx: RequestContext) -> list:
             )
         except Exception as exc:  # noqa: BLE001
             ctx.log(f"sale write failed for {item_name}: {exc}")
-            ctx.orders[item_name] = {"item_name": item_name, "status": "denied", "reason": "write failed"}
-            return json.dumps(ctx.orders[item_name])
+            denied = ctx.record_order(item_name, {"item_name": item_name, "status": "denied", "reason": "write failed"})
+            return json.dumps(denied)
         confirmed = outcome["status"] == "committed" or outcome.get("replayed")
-        ctx.orders[item_name] = {
+        order = ctx.record_order(item_name, {
             "item_name": item_name, "status": "confirmed" if confirmed else "denied",
             "reason": outcome.get("reason"),
             "delivery_date": outcome.get("delivery_date", decision["delivery_date"]),
             "total": outcome.get("total", quote["line_total"]), "replayed": bool(outcome.get("replayed")),
-        }
-        return json.dumps({field: value for field, value in ctx.orders[item_name].items() if field != "total"})
+        })
+        return json.dumps({field: value for field, value in order.items() if field != "total"})
 
     return [finalize_sale]
 
