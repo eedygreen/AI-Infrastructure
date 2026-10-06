@@ -72,6 +72,7 @@ def fresh():
     h = smolagents.HOOKS
     h["fail"].clear(); h["skip"].clear(); h["calls"].clear(); h["delay"].clear(); h["discount"] = None
     h["last_task"].clear(); h["parse_garbage"] = False; h["parse_via_final_answer"] = False
+    h["parse_quantity_divisor"] = None
     ps.ALLOW_PARTIAL_FULFILLMENT = True
     RUN["n"] += 1
     orch = ps.OrchestratorAgent(f"run{RUN['n']}", ps.InventoryAgent(), ps.QuoteAgent(), ps.OrderAgent())
@@ -160,7 +161,7 @@ def pure_parsing():
     assert ps.coerce_json('```json\n{"a": 1}\n```') == {"a": 1}
     assert ps.coerce_json('Sure! Here: {"a": 2} hope it helps') == {"a": 2}
     assert ps.coerce_json("no json") is None and ps.coerce_json(None) is None and ps.coerce_json("[1]") is None
-    p = ps.validate_parsed("raw", {"lines": [{"item_name": "a4 PAPER", "quantity": "1,000"},
+    p = ps.validate_parsed("I need 1,000 a4 PAPER, 500 A4 paper, 5 Cardstok and 5 Balloons", {"lines": [{"item_name": "a4 PAPER", "quantity": "1,000"},
                                              {"item_name": "A4 paper", "quantity": 500},
                                              {"item_name": "Cardstok", "quantity": 5},
                                              {"item_name": "Balloons", "quantity": 5},
@@ -462,6 +463,8 @@ def write_level_replay_returns_same_result_without_inserting():
     assert first["status"] == "committed" and not first.get("replayed")
     assert second["status"] == "committed" and second["replayed"] and second["transaction_id"] == first["transaction_id"]
     assert second["total"] == 9.99 and len(rows(item, "sales")) == 1
+    later = ps._commit_transaction(**{**kw, "meta": {"delivery_date": "2099-01-01", "total": 1.23}})   # asked again, with new figures
+    assert later["replayed"] and later["total"] == 9.99 and later["delivery_date"] == "2025-04-01", later   # the ORIGINAL result
     denied = ps._commit_transaction(**{**kw, "key": "k2", "guard": lambda c: "nope"})
     assert denied == {"status": "denied", "reason": "nope"} and len(rows(item, "sales")) == 1
 
@@ -504,6 +507,7 @@ def csa_prompt_does_not_invite_flattened_final_answer():
     prompt = smolagents.HOOKS["last_task"]["customer_support_agent:parse"]
     assert "ONE argument named 'answer'" in prompt, "prompt must name final_answer's single argument"
     assert "Do NOT pass lines, unmatched, needed_by, intents or notes as separate arguments" in prompt
+    assert "stays exactly as the customer wrote it" in prompt, "sheets must not be converted to reams"
     assert "ONLY this JSON object" not in prompt, "the old wording that led the model to spread the object into arguments"
     # any final_answer(...) call spelled out in the prompt may only use the real schema (a single `answer`)
     for call in re.findall(r"final_answer\(([^)]*)\)", prompt):
@@ -882,6 +886,197 @@ def resume_flag_is_wired_through_main():
             raise AssertionError("--resume did not reach the harness")
     finally:
         ps.time.sleep = old
+
+
+@test
+def every_required_starter_helper_is_used_inside_a_tool():
+    """Criterion 3: all seven starter helpers appear inside at least one @tool function."""
+    import ast
+    required = {"create_transaction", "get_all_inventory", "get_stock_level", "get_supplier_delivery_date",
+                "get_cash_balance", "generate_financial_report", "search_quote_history"}
+    source = open(os.path.join(os.path.dirname(HERE), "lib", "tools.py")).read()
+    used = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.FunctionDef) and any(isinstance(d, ast.Name) and d.id == "tool" for d in node.decorator_list):
+            used |= {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+    assert not (required - used), f"not used inside any @tool function: {sorted(required - used)}"
+
+
+@test
+def sales_and_restocks_are_written_through_the_starter_create_transaction():
+    orch, csa = fresh()
+    item = stocked(20)[0]
+    tools = importlib.import_module("lib.tools")
+    calls, original = [], tools.create_transaction
+
+    def spy(**kwargs):
+        calls.append(kwargs["transaction_type"])
+        return original(**kwargs)
+
+    tools.create_transaction = spy
+    try:
+        go(csa, orch, f"I need {stock(item, '2025-04-01') + 300} {item} by 2025-05-30")    # short: restock, then sale
+    finally:
+        tools.create_transaction = original
+    assert "stock_orders" in calls and "sales" in calls, calls
+
+
+@test
+def a_crash_between_writing_the_row_and_recording_it_does_not_write_twice():
+    fresh()
+    item = stocked(10)[0]
+
+    def crashing_writer(**kwargs):
+        ps.create_transaction(**kwargs)                          # the row IS written ...
+        raise RuntimeError("process died")                       # ... then the process dies before the key is finished
+
+    call = dict(key="crash-1", kind="sale", item_name=item, transaction_type="sales", units=3, price=12.5,
+                date="2025-04-01", guard=lambda c: None)
+    try:
+        ps._commit_transaction(writer=crashing_writer, **call)
+    except RuntimeError:
+        pass
+    assert len(rows(item, "sales")) == 1
+    retried = ps._commit_transaction(**call)                     # the retry finds the row and adopts it
+    assert len(rows(item, "sales")) == 1, "the retry wrote the row a second time"
+    assert retried["status"] == "committed" and retried["replayed"] is True
+    again = ps._commit_transaction(**call)
+    assert len(rows(item, "sales")) == 1 and again["transaction_id"] == retried["transaction_id"]
+
+
+@test
+def a_crash_before_the_row_is_written_is_retried_exactly_once():
+    fresh()
+    item = stocked(10)[0]
+
+    def failing_writer(**kwargs):
+        raise RuntimeError("database busy")                      # nothing is written
+
+    call = dict(key="crash-2", kind="sale", item_name=item, transaction_type="sales", units=3, price=12.5,
+                date="2025-04-01", guard=lambda c: None)
+    try:
+        ps._commit_transaction(writer=failing_writer, **call)
+    except RuntimeError:
+        pass
+    assert len(rows(item, "sales")) == 0
+    retried = ps._commit_transaction(**call)
+    assert len(rows(item, "sales")) == 1 and retried["status"] == "committed" and not retried.get("replayed")
+
+
+@test
+def restock_uses_get_cash_balance_for_an_early_refusal_and_keeps_the_final_check():
+    fresh()
+    item = stocked(10)[0]
+    tools = importlib.import_module("lib.tools")
+    ctx = ps.RequestContext(1, "2025-04-01", "t")
+    ctx.parsed = ps.ParsedRequest("r", None, ["order"], [ps.LineItem(item, 5)], [])
+    ctx.decisions[item] = {"action": "restock_then_ship", "restock_qty": 5, "delivery_date": "2025-04-05", "approved": True}
+    restock = ps.make_inventory_restock_tools(ctx)[0]
+    before, original, old_reserve = len(rows(item, "stock_orders")), tools.get_cash_balance, ps.MIN_CASH_RESERVE
+    try:
+        tools.get_cash_balance = lambda as_of_date: 0.0                      # the helper says: no cash
+        refused = json.loads(restock(item_name=item))
+        assert refused["status"] == "denied" and len(rows(item, "stock_orders")) == before
+        tools.get_cash_balance = lambda as_of_date: 10 ** 12                 # the helper says plenty ...
+        ps.MIN_CASH_RESERVE = 10 ** 9                                        # ... but the real books cannot cover this reserve
+        refused_again = json.loads(restock(item_name=item))
+        assert refused_again["status"] == "denied" and len(rows(item, "stock_orders")) == before   # final check still refuses
+    finally:
+        tools.get_cash_balance, ps.MIN_CASH_RESERVE = original, old_reserve
+    placed = json.loads(restock(item_name=item))                            # with the real balance it goes through
+    assert placed["status"] == "placed" and len(rows(item, "stock_orders")) == before + 1
+
+
+@test
+def the_low_stock_scan_reads_the_inventory_with_get_all_inventory():
+    fresh()
+    tools = importlib.import_module("lib.tools")
+    ctx = ps.RequestContext(1, "2025-04-01", "t")
+    original, calls = tools.get_all_inventory, []
+    tools.get_all_inventory = lambda as_of_date: calls.append(as_of_date) or {}          # nothing in stock anywhere
+    try:
+        low = json.loads(ps.make_inventory_replenish_tools(ctx)[0]())
+    finally:
+        tools.get_all_inventory = original
+    assert calls == ["2025-04-01"] and {x["item_name"] for x in low} == set(inv().item_name), (calls, low)
+
+
+@test
+def quantity_check_accepts_only_numbers_the_customer_wrote():
+    ok = ps.quantity_appears_in_request
+    assert ok(500, "I need 500 sheets of cardstock (Date of request: 2025-04-01)")
+    assert ok(10000, "please send 10,000 sheets of A4 paper")
+    assert ok(1000, "I need 2 reams of A4 paper")                            # a ream is 500 sheets
+    assert not ok(1000, "I need 2000 sheets of A4 paper")                    # no reams written: no conversion
+    assert not ok(2, "I need 1000 sheets of A4 paper")                       # the model divided by 500
+    assert not ok(1, "I need 500 sheets (Date of request: 2025-04-01)")      # the 01 of the date is not a quantity
+    assert not ok(4, "I need 500 sheets (Date of request: 2025-04-01)")      # nor the 04
+    assert not ok(15, "I need 500 sheets delivered by April 15, 2025")       # nor the day of a deadline
+    assert not ok(15, "I need 500 sheets delivered by 15 April 2025")
+    assert ok(200, "decorative 200 sheets")                                   # 'dec' inside a word is not a month
+
+
+@test
+def untraceable_quantities_are_set_aside_and_reported_not_sold():
+    raw = "I need 500 sheets of cardstock and 250 sheets of A4 paper (Date of request: 2025-04-01)"
+    payload = {"lines": [{"item_name": "A4 paper", "quantity": 250}, {"item_name": "Cardstock", "quantity": 1}],
+               "intents": ["order"]}
+    parsed = ps.validate_parsed(raw, payload, "2025-04-01")
+    assert [(l.item_name, l.quantity) for l in parsed.lines] == [("A4 paper", 250)], parsed.lines
+    assert parsed.unclear_quantity == ["Cardstock"], parsed.unclear_quantity
+
+
+@test
+def a_model_that_divides_sheets_by_500_cannot_cause_a_tiny_sale():
+    """The real bug: '500 sheets of cardstock' was sold as 1 sheet for $0.20."""
+    orch, csa = fresh()
+    item = stocked(600)[0]
+    sales_before = len(rows(item, "sales"))
+    smolagents.HOOKS["parse_quantity_divisor"] = 500
+    try:
+        reply, ctx = go(csa, orch, f"I need 500 {item} by 2025-04-10")
+    finally:
+        smolagents.HOOKS["parse_quantity_divisor"] = None
+    assert len(rows(item, "sales")) == sales_before, "a sale was written for a quantity the customer never asked for"
+    assert "not sure how many" in reply and item in reply, reply
+
+
+@test
+def all_or_nothing_holds_the_whole_order_when_a_quantity_is_unclear():
+    orch, csa = fresh()
+    good, bad = [r.item_name for _, r in inv().iterrows() if stock(r.item_name, "2025-04-01") >= 600][:2]
+    text = f"I need 5 {good} and 500 {bad} by 2025-04-10"       # the model misreads only the 500
+    try:
+        smolagents.HOOKS["parse_quantity_divisor"] = 500
+        go(csa, orch, text)                                     # partial fulfilment: the clear line ships
+        assert len(rows(good, "sales")) == 1 and len(rows(bad, "sales")) == 0
+        orch, csa = fresh()
+        smolagents.HOOKS["parse_quantity_divisor"] = 500
+        ps.ALLOW_PARTIAL_FULFILLMENT = False
+        go(csa, orch, text)
+        assert len(rows(good, "sales")) == 0 and len(rows(bad, "sales")) == 0, "all-or-nothing must hold the clear line too"
+    finally:
+        smolagents.HOOKS["parse_quantity_divisor"] = None
+        ps.ALLOW_PARTIAL_FULFILLMENT = True
+
+
+@test
+def a_crashing_request_gets_a_reply_that_names_no_internal_error():
+    pd.DataFrame({"request": ["I need 20 A4 paper by 2025-04-20"], "job": ["a"], "event": ["x"],
+                  "request_date": ["04/03/25"]}).to_csv("quote_requests_sample.csv", index=False)
+    fresh()
+    original = ps.CustomerSupportAgent.handle
+
+    def exploding(self, *args, **kwargs):
+        raise RuntimeError("secret internal detail")
+
+    ps.CustomerSupportAgent.handle = exploding
+    try:
+        results = _quiet_run()
+    finally:
+        ps.CustomerSupportAgent.handle = original
+    reply = results[0]["response"]
+    assert reply.startswith(ps.CRASH_MESSAGE) and "RuntimeError" not in reply and "secret" not in reply, reply
 
 
 @test
