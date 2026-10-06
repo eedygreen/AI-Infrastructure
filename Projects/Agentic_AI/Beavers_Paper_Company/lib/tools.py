@@ -65,10 +65,12 @@ def _place_restock(ctx: RequestContext, item_name: str, quantity: int,
             "quantity": quantity,
             "eta": eta,
             "status": "denied",
-            "reason": "insuficient funds"
+            "reason": "insufficient funds"
         }
 
     def guard(conn):
+        """The final cash check, run just before the write: refuse if the purchase would take cash below the
+        reserve. Returns a reason to refuse, or None to go ahead."""
         if _cash_in_conn(conn, ctx.request_date) - cost < config.MIN_CASH_RESERVE:
             return "insufficient funds"
         return None
@@ -77,7 +79,7 @@ def _place_restock(ctx: RequestContext, item_name: str, quantity: int,
         outcome = _retry(lambda: _commit_transaction(
             key=ctx.key(f"restock-{purpose}", item_name, quantity), kind=f"restock-{purpose}",
             item_name=item_name, transaction_type="stock_orders", units=quantity,
-            price=cost, date=ctx.request_date, guard=guard), writer=writer)
+            price=cost, date=ctx.request_date, guard=guard, writer=writer))
     except Exception as exc:  # noqa: BLE001
         ctx.log(f"restock write failed for {item_name}: {exc}")
         return {"item_name": item_name, "quantity": quantity, "status": "denied", "reason": "write failed"}
@@ -88,6 +90,7 @@ def _place_restock(ctx: RequestContext, item_name: str, quantity: int,
 
 # Tool sets, one per kind of delegated task. Only the first is read-only.
 def make_inventory_read_tools(ctx: RequestContext) -> list:
+    """The tool for checking stock. It only looks things up, so a check can never change anything."""
     @tool
     def check_item_stock(item_name: str) -> str:
         """Check on-hand stock for one requested item and, if short, the supplier delivery date for the missing units.
@@ -122,6 +125,7 @@ def make_inventory_read_tools(ctx: RequestContext) -> list:
 
 
 def make_inventory_restock_tools(ctx: RequestContext) -> list:
+    """The one tool that may buy stock for an approved order."""
     @tool
     def restock_for_order(item_name: str) -> str:
         """Buy the missing units of one item from the supplier so an approved customer order can be fulfilled.
@@ -139,12 +143,13 @@ def make_inventory_restock_tools(ctx: RequestContext) -> list:
                                 writer=create_transaction
                             )
         ctx.restocks[item_name] = result
-        return json.dumps({k: result[k] for k in ("item_name", "status", "eta") if k in result})
+        return json.dumps({field: result[field] for field in ("item_name", "status", "eta") if field in result})
 
     return [restock_for_order]
 
 
 def make_inventory_replenish_tools(ctx: RequestContext) -> list:
+    """The tools for routine replenishment: find the items below their reorder point, and top one up."""
     @tool
     def find_low_stock() -> str:
         """List stocked items that are below their reorder point, with the suggested top-up quantity."""
@@ -158,7 +163,7 @@ def make_inventory_replenish_tools(ctx: RequestContext) -> list:
         Args:
             item_name: Exact catalog name of an item returned by find_low_stock.
         """
-        match = next((x for x in _low_stock_items(ctx.request_date) if x["item_name"] == item_name), None)
+        match = next((entry for entry in _low_stock_items(ctx.request_date) if entry["item_name"] == item_name), None)
         if not match:
             return json.dumps({"item_name": item_name, "status": "skipped", "reason": "not below reorder point"})
         cash_available = get_cash_balance(as_of_date=ctx.request_date)
@@ -169,13 +174,14 @@ def make_inventory_replenish_tools(ctx: RequestContext) -> list:
                                 writer=create_transaction
                             )
         ctx.background.append(result)
-        return json.dumps({k: result[k] for k in ("item_name", "status") if k in result})
+        return json.dumps({field: result[field] for field in ("item_name", "status") if field in result})
 
     return [find_low_stock, restock_for_replenishment]
 
 
 # Tools for quoting agent
 def make_quote_history_tools(ctx: RequestContext) -> list:
+    """The tool that finds similar past quotes."""
     @tool
     def search_history(search_terms: List[str]) -> str:
         """Search past quotes that match ANY of the given terms (item names, event types).
@@ -184,9 +190,9 @@ def make_quote_history_tools(ctx: RequestContext) -> list:
             search_terms: Two to five short search terms.
         """
         seen, merged = set(), []
-        for term in [str(t) for t in search_terms][:5]:
+        for term in [str(raw_term) for raw_term in search_terms][:5]:
             try:
-                rows = _retry(lambda t=term: search_quote_history(search_terms=[t], limit=3))
+                rows = _retry(lambda current_term=term: search_quote_history(search_terms=[current_term], limit=3))
             except Exception as exc:  # noqa: BLE001
                 ctx.log(f"quote history unavailable for '{term}': {exc}")
                 continue
@@ -196,17 +202,18 @@ def make_quote_history_tools(ctx: RequestContext) -> list:
                     seen.add(ident)
                     merged.append(row)
         ctx.history = merged[:5]
-        summary = [{"total_amount": r.get("total_amount"), "order_size": r.get("order_size"),
-                    "event_type": r.get("event_type"),
-                    "discount_hint_pct": (lambda h: None if h is None else round(h * 100, 1))(
-                        extract_discount_hint(r.get("quote_explanation", "")))}
-                   for r in ctx.history]
+        summary = [{"total_amount": past.get("total_amount"), "order_size": past.get("order_size"),
+                    "event_type": past.get("event_type"),
+                    "discount_hint_pct": (lambda hint: None if hint is None else round(hint * 100, 1))(
+                        extract_discount_hint(past.get("quote_explanation", "")))}
+                   for past in ctx.history]
         return json.dumps(summary)
 
     return [search_history]
 
 
 def make_quote_pricing_tools(ctx: RequestContext) -> list:
+    """The tools for pricing: the allowed discount range for each item, and pricing one item within it."""
     @tool
     def get_pricing_context() -> str:
         """Get list prices and the allowed discount range for every line of this request.
@@ -215,12 +222,12 @@ def make_quote_pricing_tools(ctx: RequestContext) -> list:
         report_ok = True
         try:
             report = _retry(lambda: generate_financial_report(as_of_date=ctx.request_date))
-            high_demand = {r["item_name"] for r in report["top_selling_products"]}
+            high_demand = {product["item_name"] for product in report["top_selling_products"]}
         except Exception as exc:  # noqa: BLE001
             report_ok = False # fail closed: without the demand signal, treat every item as a top seller
             ctx.log(f"financial report unavailable, halving every discount cap: {exc}")
-        hints = [h for h in (extract_discount_hint(r.get("quote_explanation", "")) for r in ctx.history)
-                 if h is not None]
+        hints = [found for found in (extract_discount_hint(past.get("quote_explanation", "")) for past in ctx.history)
+                 if found is not None]
         hint = sorted(hints)[len(hints) // 2] if hints else None
         out = {}
         for line in ctx.parsed.lines:
@@ -266,6 +273,7 @@ def make_quote_pricing_tools(ctx: RequestContext) -> list:
 
 # Tools for ordering agent
 def make_order_tools(ctx: RequestContext) -> list:
+    """The one tool that records a sale."""
     @tool
     def finalize_sale(item_name: str) -> str:
         """Record the sale of one approved line. Price and quantity come from the stored quote.
@@ -282,6 +290,8 @@ def make_order_tools(ctx: RequestContext) -> list:
         quantity = quote["quantity"]
 
         def guard(conn):   # checked just before the write, under the write lock
+            """The final stock check, run just before the write: refuse if the stock is no longer there.
+            Returns a reason to refuse, or None to go ahead."""
             if _stock_in_conn(conn, item_name, ctx.request_date) < quantity:
                 return "stock changed"
             return None
@@ -305,13 +315,14 @@ def make_order_tools(ctx: RequestContext) -> list:
             "delivery_date": outcome.get("delivery_date", decision["delivery_date"]),
             "total": outcome.get("total", quote["line_total"]), "replayed": bool(outcome.get("replayed")),
         }
-        return json.dumps({k: v for k, v in ctx.orders[item_name].items() if k != "total"})
+        return json.dumps({field: value for field, value in ctx.orders[item_name].items() if field != "total"})
 
     return [finalize_sale]
 
 
 # Tools for customer support agent
 def make_customer_support_tools() -> list:
+    """The tool the customer support agent uses to match a customer's wording to catalog names."""
     @tool
     def lookup_catalog_item(query: str) -> str:
         """Find catalog items whose name best matches a customer's wording.
@@ -319,11 +330,11 @@ def make_customer_support_tools() -> list:
         Args:
             query: The product wording used by the customer, e.g. 'glossy A4 sheets'.
         """
-        q = query.lower().strip()
+        wording = query.lower().strip()
         names = list(CATALOG)
-        hits = [n for n in names if q in n.lower() or n.lower() in q]
-        for n in difflib.get_close_matches(q, [n.lower() for n in names], n=3, cutoff=0.4):
-            original = next(x for x in names if x.lower() == n)
+        hits = [name for name in names if wording in name.lower() or name.lower() in wording]
+        for close_match in difflib.get_close_matches(wording, [name.lower() for name in names], n=3, cutoff=0.4):
+            original = next(name for name in names if name.lower() == close_match)
             if original not in hits:
                 hits.append(original)
         return json.dumps(hits[:5])
