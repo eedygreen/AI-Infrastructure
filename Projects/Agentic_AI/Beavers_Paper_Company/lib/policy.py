@@ -3,7 +3,7 @@
 import difflib
 import json
 import re
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from lib import config
 from lib.database import CATALOG
@@ -88,11 +88,35 @@ def coerce_json(answer) -> Optional[dict]:
             return None
     return None
 
+_MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november|december"
+          r"|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\b")
+_DATE_PATTERNS = [
+    re.compile(r"\(Date of request:[^)]*\)", re.I),                                           # the date the harness adds
+    re.compile(rf"\b{_MONTH}\.?\s+\d{{1,2}}(?!\d)(?:st|nd|rd|th)?(?:,?\s+\d{{4}})?", re.I),            # April 15, 2025
+    re.compile(rf"\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH}(?:,?\s+\d{{4}})?", re.I),    # 15 April 2025
+    re.compile(r"\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}"),                                  # 2025-04-15, 4/15/25
+]
+
+def quantity_appears_in_request(quantity: int, raw: str) -> bool:
+    """True if `quantity` is a number the customer wrote (a count of reams counts as 500 sheets each).
+
+    The model turns the customer's words into a number. This checks that number against the words, so a
+    slip such as reading "500 sheets" as 1 ream can never become a sale. Dates are removed first, so a
+    day or a year in the message cannot vouch for a quantity."""
+    text = raw
+    for pattern in _DATE_PATTERNS:
+        text = pattern.sub(" ", text)
+    written = {int(n.replace(",", "")) for n in re.findall(r"\d[\d,]*", text) if n.replace(",", "").isdigit()}
+    if re.search(r"\bream", text, re.I):
+        written |= {n * config.SHEETS_PER_REAM for n in written}
+    return quantity in written
+
 def validate_parsed(raw: str, payload: dict, request_date: str) -> ParsedRequest:
     """Never trust the LLM's structure: validate names against the catalog, coerce numbers."""
     names_lower = {n.lower(): n for n in CATALOG}
     merged: Dict[str, int] = {}
     unmatched = [str(u) for u in (payload.get("unmatched") or [])]
+    unclear: List[str] = []                   # items whose quantity cannot be traced to the customer's words
     for entry in payload.get("lines") or []:
         raw_name = str((entry or {}).get("item_name", "")).strip()
         name = names_lower.get(raw_name.lower())
@@ -105,6 +129,10 @@ def validate_parsed(raw: str, payload: dict, request_date: str) -> ParsedRequest
             quantity = 0
         if not name or quantity <= 0:
             unmatched.append(raw_name or "(unnamed item)")
+            continue
+        if not quantity_appears_in_request(quantity, raw):      # the model's arithmetic is never trusted
+            if name not in unclear:
+                unclear.append(name)
             continue
         merged[name] = merged.get(name, 0) + quantity
     needed_by = payload.get("needed_by")
@@ -119,6 +147,6 @@ def validate_parsed(raw: str, payload: dict, request_date: str) -> ParsedRequest
     return ParsedRequest(
         raw=raw, needed_by=needed_by, intents=intents,
         lines=[LineItem(n, q) for n, q in merged.items()],
-        unmatched=unmatched, notes=str(payload.get("notes") or ""),
+        unmatched=unmatched, unclear_quantity=unclear, notes=str(payload.get("notes") or ""),
         deadline_unconfirmed=deadline_unconfirmed,
     )
