@@ -101,7 +101,6 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resu
         finished = []
     else:
         logger.info("Resuming run %s after request %s", run_id, len(finished))
-        logger.info(f"Resumging run {run_id}: requests 1 to {len(finished)} are already done.")
         ensure_runtime_tables()
 
     # Get initial state
