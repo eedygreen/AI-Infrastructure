@@ -75,7 +75,7 @@ InventoryAgent
 QuoteAgent
     Everything about price:
         search_quote_history                find similar past quotes
-        generate_financial_report           internal financial data used to set the margin floor
+        generate_financial_report           internal financial data: which products sell best
     It applies a bulk discount within the margin floor and returns quotations.
 
 OrderAgent
@@ -258,9 +258,10 @@ Pricing happens when a Quote is needed, and it depends on the Phase 1 results.
         1. The orchestrator sends a price request containing the stock position, the ETA and
            the quote history.
         2. The QuoteAgent reads internal financial data (generate_financial_report). This
-           data is internal only and is used to set the margin floor for discounts.
-        3. The QuoteAgent applies a bulk discount within the margin floor. The discount can
-           never take the price below the floor.
+           data is internal only. It shows which products sell best, and those get smaller
+           discounts.
+        3. The stock is checked again just before the write, under a write lock, because it
+           may have changed since Phase 1.
         4. It returns one of:
                 Success         the quotation(s)
                 Error           an error with a reason
@@ -422,8 +423,8 @@ These follow from the structure of the diagram.
          in Phase 3 and in the background replenishment.
     G2.  Parallel work is limited to independent reads, so parallelism cannot cause harm.
     G3.  Anything retried is safe to retry: a read, or a write with its idempotency key.
-    G4.  A sale cannot take stock that is not there: stock is verified and decremented in one
-         transaction at the moment of sale.
+    G4.  A sale cannot use stock that is not there: the stock is checked again at the moment of
+         sale, just before the write.
     G5.  No purchase takes cash below the cash floor.
     G6.  A quote is never produced without a known stock position, and it never goes below the
          margin floor.
