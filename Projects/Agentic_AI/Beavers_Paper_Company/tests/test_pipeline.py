@@ -1080,6 +1080,61 @@ def a_crashing_request_gets_a_reply_that_names_no_internal_error():
 
 
 @test
+def a_restocked_order_explains_its_later_delivery_date():
+    orch, csa = fresh()
+    item = stocked(10)[0]
+    in_stock, _ = go(csa, orch, f"I need 5 {item} by 2025-05-30", rid=1)
+    assert "CONFIRMED" in in_stock and "restock" not in in_stock, in_stock          # same-day delivery needs no excuse
+    short, _ = go(csa, orch, f"I need {stock(item, '2025-04-01') + 300} {item} by 2025-05-30", rid=2)
+    assert "CONFIRMED" in short and "(includes time to restock this item)" in short, short
+
+
+@test
+def a_quote_says_why_a_restocked_item_gets_no_bulk_discount():
+    orch, csa = fresh()
+    item = stocked(10)[0]
+    reply, _ = go(csa, orch, f"How much is {stock(item, '2025-04-01') + 300} {item}?")
+    assert "no bulk discount because we must restock this item" in reply, reply
+    in_stock_reply, _ = go(csa, orch, f"How much is 5 {item}?", rid=2)               # below the first discount tier: nothing to explain
+    assert "no bulk discount" not in in_stock_reply, in_stock_reply
+
+
+def _our_source_files():
+    """The files that are our own code (the starter's file is not)."""
+    import glob
+    root = os.path.dirname(HERE)
+    return [f for f in glob.glob(os.path.join(root, "lib", "*.py")) if "starter_utils" not in f] + \
+           [os.path.join(root, "workflow.py"), os.path.join(root, "main.py")]
+
+
+@test
+def every_function_and_class_has_a_docstring():
+    """Criterion 7: docstrings at appropriate places."""
+    import ast
+    missing = []
+    for path in _our_source_files():
+        for node in ast.walk(ast.parse(open(path).read())):
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and not (node.name.startswith("__") and node.name.endswith("__")):
+                if not ast.get_docstring(node):
+                    missing.append(f"{os.path.basename(path)}:{node.name}")
+    assert not missing, f"no docstring: {missing}"
+
+
+@test
+def no_one_letter_variable_names_in_our_code():
+    """Criterion 7: descriptive names."""
+    import ast
+    short = []
+    for path in _our_source_files():
+        for node in ast.walk(ast.parse(open(path).read())):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store) and len(node.id) == 1 and node.id != "_":
+                short.append(f"{os.path.basename(path)}:{node.lineno} {node.id}")
+            if isinstance(node, ast.arg) and len(node.arg) == 1:
+                short.append(f"{os.path.basename(path)}:{node.lineno} {node.arg}")
+    assert not short, f"one-letter names: {short}"
+
+
+@test
 def cash_in_conn_matches_starter_get_cash_balance():
     orch, csa = fresh()
     item, mn, price = stocked(50)
