@@ -32,6 +32,19 @@ class ParsedRequest:
     failed: bool = False                           # parsing itself failed (system problem): never blame the customer
     unclear_quantity: List[str] = field(default_factory=list)   # items whose quantity is not in the customer's own words: we ask, never guess
 
+    def record_order(self, item_name: str, order: dict) -> dict:
+        """Store the order result for an item and return what is on record.
+
+        A confirmation already on record is never replaced by a repeat of the same sale or by a failure. A model
+        can call the sale tool twice for one item. The second call is recognised as a repeat and must not turn
+        a new order into "already placed"."""
+        with self._lock:
+            current = self.orders.get(item_name)
+            if current and current["status"] == "confirmed" and (order["status"] != "confirmed" or order.get("replayed")):
+                return current
+            self.orders[item_name] = order
+            return order
+
 @dataclass
 class RequestContext:
     """Everything known about one request: the parsed request, the results of each phase, and the log.
