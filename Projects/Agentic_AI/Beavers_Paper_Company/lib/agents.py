@@ -282,7 +282,8 @@ class OrchestratorAgent:
             ctx.decisions[line.item_name] = decision
 
         if not config.ALLOW_PARTIAL_FULFILLMENT and (
-                ctx.parsed.unmatched or any(d["action"] == "skip" for d in ctx.decisions.values())):
+                ctx.parsed.unmatched or ctx.parsed.unclear_quantity
+                or any(d["action"] == "skip" for d in ctx.decisions.values())):
             for name, d in ctx.decisions.items():
                 if d["action"] != "skip":
                     ctx.decisions[name] = {"action": "skip", "reason": "held_partial"}
@@ -347,6 +348,9 @@ class OrchestratorAgent:
             return "\n".join(out)
         if p.unmatched:
             out.append("We could not match these to products we sell: " + "; ".join(p.unmatched) + ".")
+        if p.unclear_quantity:
+            out.append("We were not sure how many you need of: " + "; ".join(p.unclear_quantity)
+                       + ". Please confirm the quantities and we will happily help.")
         if p.deadline_unconfirmed:
             out.append(f"The delivery date you gave ({p.deadline_unconfirmed}) is earlier than your request date. "
                        "Could you confirm the date you need?"
@@ -433,7 +437,9 @@ class CustomerSupportAgent(SpecialistAgent):
             "into structured data.\nRules:\n"
             "- Map every requested product to an EXACT catalog name (use lookup_catalog_item when unsure). "
             "Only exact names may appear in 'lines'. Products you cannot map go in 'unmatched' using the customer's wording.\n"
-            f"- quantity: positive integer count of catalog units (sheets/units). 1 ream = {config.SHEETS_PER_REAM} sheets. "
+            f"- quantity: positive integer count of catalog units. Every catalog item is counted in single sheets or pieces, "
+            "so a number of sheets or pieces stays exactly as the customer wrote it (500 sheets means 500, never 1). "
+            f"Only reams are converted: 1 ream = {config.SHEETS_PER_REAM} sheets. \n"
             "Keep other units (boxes, packs) as the stated number and mention them in 'notes'.\n"
             "- needed_by: delivery deadline as YYYY-MM-DD or null. Relative dates are relative to the request date.\n"
             "- intents: subset of [\"inventory\",\"quote\",\"order\"]. 'order' ONLY if the customer clearly wants to buy/place/ship goods; "
