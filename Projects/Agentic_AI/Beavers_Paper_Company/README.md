@@ -35,23 +35,24 @@ python tests/test_pipeline.py            # run the tests (no API key needed)
 .
 ├── main.py                  entry point: parses flags, loads .env, runs the workflow
 ├── project_starter.py       8-line wrapper around main.py, so `python project_starter.py` still works
-├── workflow.py              the test harness: run_test_scenarios(limit, no_sleep, resume)
+├── workflow.py              the test harness: run_test_scenarios(limit, no_sleep, resume), the loop over the requests
 ├── lib/                     the library
 │   ├── agents.py            THE FIVE AGENTS + agent plumbing + get_model()
 │   ├── tools.py             ALL TOOLS the agents can call (make_*_tools factories)
 │   ├── config.py            policy knobs (discounts, cash reserve, retries) + load_env()
 │   ├── models.py            LineItem, ParsedRequest, RequestContext (the per-request ledger)
+│   ├── StateMachine.py      StateMachine: the state of a test run (start or resume, results, books, when to stop)
 │   ├── policy.py            pure functions: pricing policy, fulfilment gate, parsing/validation
 │   ├── database.py          CATALOG + once-only (idempotent) writes + retry helper
 │   └── starter_utils.py     the starter's utility functions (database setup, stock, cash, reports)
 ├── utils/logs.py            the project's logger (`from utils import logger`)
 ├── tests/
-│   ├── test_pipeline.py     the test suite (69 tests)
+│   ├── test_pipeline.py     the test suite (74 tests)
 │   └── shims/smolagents/    a scripted stand-in model, used only by the tests
 ├── quote_requests.csv       seed data for the database (quote history)
 ├── quotes.csv               seed data for the database (past quotes)
 ├── quote_requests_sample.csv  the requests the harness runs
-├── design_notes.txt         how the system works and why (read this after the README)
+├── design_notes.txt         how the system works and why, and the reflection report (read this after the README)
 ├── beavers_agents_overview.mermaid / beavers_agents_detailed.mermaid   design diagrams (source)
 ├── beavers_agent.jpg / beavers_agent_sequence_detailed.jpg             design diagrams (images)
 ├── backup/                  the original single-file version and a map of where each function went
@@ -241,7 +242,7 @@ when the module loads, so changes made at runtime (and by the tests) would silen
 python tests/test_pipeline.py
 ```
 
-Expected last line: `69/69 passed`. The script prints `PASS`/`FAIL` for each test (a failure prints its full traceback)
+Expected last line: `74/74 passed`. The script prints `PASS`/`FAIL` for each test (a failure prints its full traceback)
 and exits with code 0 only if all pass. It is a plain script, not a pytest suite. A few `usage: ... error: --limit must be 1 or more` lines near the
 start are expected: one test deliberately passes bad flags and checks they are rejected.
 
