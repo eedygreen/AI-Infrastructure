@@ -40,6 +40,7 @@ def _resume_state(sample):
     Returns (finished_rows, run_id), or (None, None) when no request was really finished. Refuses (SystemExit) when what
     is on disk does not fit together: stopping is better than carrying on with wrong books."""
     def refuse(why):
+        """Stop with a clear message instead of resuming on books that do not fit together."""
         raise SystemExit(f"Cannot resume: {why}. Run without --resume to start over.")
 
     if not os.path.exists("test_results.csv"):
@@ -55,8 +56,8 @@ def _resume_state(sample):
     run_id = load_run_id()
     if not run_id:
         refuse("the database holds no record of the earlier run")
-    dates = [d.strftime("%Y-%m-%d") for d in sample["request_date"]]
-    if [r["request_date"] for r in rows] != dates[:len(rows)]:
+    dates = [day.strftime("%Y-%m-%d") for day in sample["request_date"]]
+    if [saved["request_date"] for saved in rows] != dates[:len(rows)]:
         refuse("the saved results do not match quote_requests_sample.csv")
     last = rows[-1]
     report = generate_financial_report(last["request_date"])
@@ -74,6 +75,10 @@ def _save_results(results):
     os.replace("test_results.csv.tmp", "test_results.csv")
 
 def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resume: bool = False):
+    """Run the sample requests through the agents, one at a time, and write test_results.csv.
+
+    `limit` handles only the first N requests (by date). `no_sleep` skips the pause between requests.
+    `resume` continues a stopped run instead of starting over. Returns the list of result rows."""
     try:
         quote_requests_sample = pd.read_csv("quote_requests_sample.csv")
         quote_requests_sample["request_date"] = pd.to_datetime(
