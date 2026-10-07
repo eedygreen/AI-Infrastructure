@@ -77,6 +77,24 @@ look-up may be repeated freely. A change is repeated only with its idempotency k
 label built from the run, request, item and quantity, so a repeat is recognised and happens
 once. Every failure ends in a safe retry or a reported reason, never in a silent change.
 
+Where each step lives in the code (an index for an engineer joining the project)
+
+All in lib/agents.py unless another file is named. The methods belong to OrchestratorAgent,
+except handle and categorize (CustomerSupportAgent). handle is the customer loop: on each
+iteration it reads the request (categorize), calls process, then calls after_reply. process runs
+steps 1 to 5 in order, skipping Phases 2 and 3 when the request does not need them.
+
+ Reading the request  categorize (its validation rules: validate_parsed in lib/policy.py)
+ 1 Plan               plan
+ 2 Phase 1            _phase1, which runs _inventory_check and _history_prefetch side by side
+ 3 Phase 2            _phase2 (the pricing rules are in lib/policy.py)
+ 4 Phase 3            _phase3 (the ship-or-skip rule: decide_fulfillment in lib/policy.py;
+                      a sale already recorded for this request: _prior_sale)
+ 5 Reply              render
+ 6 Background         after_reply starts _replenish once the reply exists
+ Safe writes          _commit_transaction in lib/database.py
+ Run state            StateMachine in lib/StateMachine.py (used by workflow.py)
+
 Why the architecture looks this way
 
 The decisions follow from four questions asked of every step. Does it need language
