@@ -39,7 +39,6 @@ class StateMachine:
             finished = []
         else:
             logger.info("Resuming run %s after request %s", run_id, len(finished))
-            logger.info(f"Resumging run {run_id}: requests 1 to {len(finished)} are already done.")
             ensure_runtime_tables()
 
         self.run_id = run_id
