@@ -4,7 +4,8 @@ scripted policy that tests can sabotage via HOOKS."""
 import inspect, json, re, threading
 
 HOOKS = {"fail": {}, "skip": {}, "discount": None, "calls": [], "lock": threading.Lock(), "delay": {},
-         "last_task": {}, "parse_garbage": False, "parse_via_final_answer": False, "parse_quantity_divisor": None}
+         "last_task": {}, "parse_garbage": False, "parse_via_final_answer": False, "parse_quantity_divisor": None,
+         "duplicate_sale_calls": False}
 
 class StubTool:
     def __init__(self, func): self.func, self.name = func, func.__name__
@@ -77,7 +78,9 @@ def _policy(agent, task):
             if l["item_name"] not in skip: t["restock_for_order"](item_name=l["item_name"])
     elif mode == "order":
         for l in _lines(task):
-            if l["item_name"] not in skip: t["finalize_sale"](item_name=l["item_name"])
+            if l["item_name"] not in skip:
+                t["finalize_sale"](item_name=l["item_name"])
+                if HOOKS["duplicate_sale_calls"]: t["finalize_sale"](item_name=l["item_name"])     # a model that repeats itself
     elif mode == "replenish":
         for it in json.loads(t["find_low_stock"]()):
             t["restock_for_replenishment"](item_name=it["item_name"])
