@@ -1,521 +1,200 @@
-DESIGN NOTES
+DESIGN NOTES AND REFLECTION REPORT
 Beavers Paper Company (Munder Difflin): multi-agent ordering system
 
-Source of truth: beavers_agents_detailed.mermaid (the sequence diagram).
-This document explains that design in words. It describes the design only. The code is one
-implementation of it, and nothing here describes the code.
-
-Contents
-    1.  Purpose
-    2.  Participants and their responsibilities
-    3.  How to read the diagram: notation and rules that apply everywhere
-    4.  The big picture
-    5.  The customer loop
-    6.  Planning
-    7.  Phase 1: independent reads, in parallel
-    8.  Phase 2: pricing
-    9.  Phase 3: side effects, gated
-    10. Synthesis and reply
-    11. Background replenishment
-    12. Failure handling as designed
-    13. What the design guarantees
-    14. Extension points
-    15. Drawbacks and future improvements
-    16. Glossary
-
-
-======================================================================================
-1. PURPOSE
-======================================================================================
-
-A customer sends one or more requests. The system must handle three kinds of request:
-
-    - Inventory   "do you have this, and when could you get more?"
-    - Quote       "what would this cost?"
-    - Order       "sell me this"
-
-For an order it must check stock, price the goods (with a bulk discount where that is
-sensible), buy more stock from the supplier when there is a shortfall and the delivery can
-still be on time, record the sale, and reply. Separately, and without ever delaying a
-customer, it keeps the warehouse stocked.
-
-The design is built around one rule: reads happen first and in parallel, nothing with a side
-effect happens until the results are in and a gate has allowed it, and anything that goes
-wrong is reported, not hidden.
-
-
-======================================================================================
-2. PARTICIPANTS AND THEIR RESPONSIBILITIES
-======================================================================================
-
-Customer (actor)
-    Sends requests, receives the reply, and either confirms they are satisfied or sends a
-    follow-up.
-
-CustomerSupportAgent
-    The front door. It receives the customer's requests, identifies them and categorizes each
-    as Order, Quote or Inventory, and hands them to the orchestrator with a request id and the
-    current iteration number. It returns the reply to the customer, runs the loop, and ends it
-    with a closing message or an escalation to a human agent.
-
-OrchestratorAgent
-    The coordinator. It plans which agents are needed and in what order, delegates, decides
-    what is allowed to happen next, evaluates the results, and synthesizes the reply. It
-    also starts the background replenishment. It owns no data and calls no database tools
-    itself.
-
-InventoryAgent
-    Everything about stock and supply:
-        get_stock_level                     read stock per item
-        get_supplier_delivery_date          ask the supplier how soon missing units could arrive
-        get_cash_balance                    check cash before any purchase
-        create_transaction (stock_orders)   buy stock
-        get_all_inventory                   read the full inventory (background scan)
-
-QuoteAgent
-    Everything about price:
-        search_quote_history                find similar past quotes
-        generate_financial_report           internal financial data: which products sell best
-    It applies a bulk discount within the margin floor and returns quotations.
-
-OrderAgent
-    Records the sale:
-        create_transaction (sales)          the only sale write in the design
-
-Database
-    Holds stock, cash, transactions and quote history. Every access to it goes through the
-    agent that owns the matching tool.
-
-Supplier (external)
-    A system outside the company. It answers delivery-date questions. It can be slow or
-    unavailable, which is why the design treats its answer as "an ETA or a timeout".
-
-A rule about ownership: each tool belongs to exactly one agent. Read tools and write tools
-are never mixed in one task (see sections 7 to 9).
-
-
-======================================================================================
-3. HOW TO READ THE DIAGRAM: RULES THAT APPLY EVERYWHERE
-======================================================================================
-
-Arrows
-    request (synchronous)            the sender waits for the answer
-    response or return               the answer coming back
-    asynchronous (fire and forget)   used only for background work: the sender carries on
-
-Blocks
-    loop         repeated until its condition is met
-    par          the branches run at the same time
-    opt          happens only when its condition holds
-    alt          exactly one of the branches happens
-    shaded box   a phase whose purpose is stated in its heading (Phase 3 and the background)
-
-Rules stated in the diagram that hold throughout:
-
-    1. Every database call and every supplier call has a timeout and a bounded retry.
-    2. Reads may be retried freely. Writes are never retried blindly: a write carries an
-        idempotency key, and only the same key may be retried.
-    3. The keys named in the diagram are:
-            restock + request_id        an item restock for one request
-            request_id + item           an order item
-            item + reorder cycle        a background restock
-    4. Internal data (cash, margins, supplier cost) is redacted before anything reaches the
-        customer.
-    5. "Extension point" marks the place where new tools attach to an agent: more inventory
-        tools, more pricing tools, more order tools.
-    6. Shared state across loop iterations: request id, iteration, and prior results. An
-        order that has been placed is never placed again.
-
-
-======================================================================================
-4. THE BIG PICTURE
-======================================================================================
-
-    Customer
-       |  request(s)
-       v
-    CustomerSupportAgent    identify requests, categorize: Order / Quote / Inventory
-       |  delegate(requests, request id, iteration)
-       v
-    OrchestratorAgent       plan: select agents and dependencies
-       |
-       |  PHASE 1   independent reads, in parallel
-       |      InventoryAgent: stock per item + supplier ETA for any shortfall
-       |      QuoteAgent:     similar past quotes
-       |
-       |  PHASE 2   pricing, needs the Phase 1 results
-       |      QuoteAgent:     bulk discount within the margin floor
-       |
-       |  PHASE 3   side effects, gated on Phases 1 and 2
-       |      InventoryAgent: guarded restock when there is a shortfall
-       |      OrderAgent:     record the sale
-       |
-       |  synthesize the reply, redact internal data
-       v
-    CustomerSupportAgent  ->  Customer
-
-    BACKGROUND (off the request path, never affects the customer's outcome)
-       OrchestratorAgent -> InventoryAgent: scan for items below their reorder point,
-       restock within the cash floor, report to the log.
-
-    Then: the customer confirms (the loop ends) or follows up (the loop repeats).
-
-
-======================================================================================
-5. THE CUSTOMER LOOP
-======================================================================================
-
-The whole exchange sits inside a loop that repeats until the customer is satisfied or the
-iteration count passes MAX_ITERATIONS.
-
-    Each iteration:
-        1. The CustomerSupportAgent identifies the requests and categorizes them as Order,
-           Quote or Inventory.
-        2. It delegates them to the OrchestratorAgent with the request id and the iteration.
-        3. The orchestrator plans and runs the phases (sections 6 to 10).
-        4. The reply goes back to the customer.
-        5. The background replenishment is started (section 11).
-        6. The customer either confirms they are satisfied or sends follow-up requests.
-
-    How the loop ends:
-        - the customer confirmed:   the CustomerSupportAgent sends a closing message;
-        - MAX_ITERATIONS reached:   the CustomerSupportAgent escalates to a human agent.
-
-    State carried between iterations: the request id, the iteration number, and the results
-    so far. Because prior results are carried, an order that was placed in an earlier
-    iteration is recognised and is never placed again.
-
-The loop is bounded on purpose. The customer's satisfaction ends it early; the cap guarantees
-it ends.
-
-
-======================================================================================
-6. PLANNING
-======================================================================================
-
-The orchestrator's first step is to plan: select the agents needed and the dependencies
-between them.
-
-    Rule: an Order implies Inventory and Quote as prerequisites. The plan adds them even if
-    the customer asked only for an order.
-
-Other dependencies shown by the structure of the diagram:
-
-    - pricing needs the stock position (Phase 2 only proceeds when stock levels are known);
-    - an order needs both the stock position and a quotation (Phase 3 only proceeds when the
-      quote is OK).
-
-Only the agents the plan selects are called. An inventory-only request never reaches pricing
-or ordering.
-
-
-======================================================================================
-7. PHASE 1: INDEPENDENT READS, IN PARALLEL
-======================================================================================
-
-Phase 1 contains two branches that run at the same time, because neither needs the other's
-answer and both only read.
-
-7.1 STOCK AND DELIVERY CHECK (fanned out per item), when Inventory is needed
-
-    The orchestrator asks the InventoryAgent for the items. The call has a timeout and a
-    bounded retry, which is safe because it is read-only.
-
-        Step 1   read stock per item (get_stock_level).
-        Step 2   if any item is short: ask the supplier for a delivery date for the missing
-                 units (get_supplier_delivery_date). The answer is an ETA or a timeout.
-        Step 3   report one of three outcomes to the orchestrator:
-
-            Success                 stock levels, plus an ETA for every shortfall
-            Partial                 stock levels, ETA unknown (the supplier was unavailable)
-            Error or timeout        an error with a reason, after the retries are used up
-
-    Extension point: more inventory tools attach here.
-
-7.2 QUOTE HISTORY PREFETCH (independent of stock), when a Quote is needed
-
-    The orchestrator asks the QuoteAgent for similar past quotes for this customer and these
-    items (search_quote_history). Timeout and bounded retry apply; it is read-only.
-
-            Success                 the quote history
-            Error or timeout        an error with a reason
-
-Why this phase is parallel: the two reads are independent and neither changes anything, so
-running them together saves time and a failure in one cannot damage the other.
-
-
-======================================================================================
-8. PHASE 2: PRICING
-======================================================================================
-
-Pricing happens when a Quote is needed, and it depends on the Phase 1 results.
-
-    Condition: stock levels are known.
-        If stock could not be read, the design does not guess: it reports that the quote is
-        unavailable because it cannot be priced safely.
-
-    When stock levels are known:
-        1. The orchestrator sends a price request containing the stock position, the ETA and
-           the quote history.
-        2. The QuoteAgent reads internal financial data (generate_financial_report). This
-           data is internal only. It shows which products sell best, and those get smaller
-           discounts.
-        3. The stock is checked again just before the write, under a write lock, because it
-           may have changed since Phase 1.
-        4. It returns one of:
-                Success         the quotation(s)
-                Error           an error with a reason
-
-    Extension point: more pricing tools attach here.
-
-Pricing performs no writes. Its result is what Phase 3 uses to decide whether an order can
-proceed.
-
-
-======================================================================================
-9. PHASE 3: SIDE EFFECTS, GATED
-======================================================================================
-
-Phase 3 is the only part of a request that changes anything, and it runs only when an order
-was requested. It is gated on Phases 1 and 2: nothing here happens unless the stock position
-and the quotation are good.
-
-9.1 ITEMS SHORTFALL HANDLING: a guarded restock for THIS order
-
-    Condition (all three must hold):
-        - there is a shortfall, AND
-        - the supplier's ETA meets the customer's delivery need, AND
-        - the quote is OK.
-
-    Steps:
-        1. The orchestrator sends the InventoryAgent a restock request: item, quantity and
-           the key "restock + request_id".
-        2. The InventoryAgent reads the cash balance (get_cash_balance).
-        3. Cash gate. Either:
-               - cash covers the cost and stays above the cash floor: the stock purchase is
-                 recorded (create_transaction, stock_orders) and the agent answers
-                 "restock placed" with the ETA; or
-               - cash is insufficient, or the write failed: the agent answers
-                 "restock denied" with a reason.
-
-9.2 THE ORDER
-
-    The decision is: is the order fulfillable?
-
-        Fulfillable means either the goods are in stock, or a restock was placed.
-
-    If fulfillable:
-        1. The orchestrator sends the OrderAgent an order request with the delivery date and
-           the key "request_id + item".
-        2. The OrderAgent records the sale (create_transaction, sales).
-        3. This write is atomic: stock is verified and decremented in a single transaction,
-           because stock may have changed since Phase 1.
-        4. The OrderAgent reports one of:
-                Success                             the order status
-                Error, for example stock changed    an error with a reason
-        Extension point: more order tools attach here.
-
-    If not fulfillable (the ETA is too late or unknown, the restock was denied, or a
-    prerequisite failed):
-        The order is skipped. The blocked order is reported and no side effects occur.
-
-9.3 THE GATE AT A GLANCE
-
-    Situation                                          What happens
-    -------------------------------------------------  -----------------------------------
-    In stock, quote OK                                 order is placed
-    Short, ETA on time, quote OK, cash allows          restock, then the order is placed
-    Short, ETA on time, quote OK, cash does not allow  restock denied; order skipped
-    Short, ETA too late or unknown                     order skipped
-    Quote not OK, or a prerequisite failed             order skipped
-    Stock changed between check and sale               the sale is refused, with a reason
-
-    In every "skipped" row nothing was bought and nothing was sold.
-
-
-======================================================================================
-10. SYNTHESIS AND REPLY
-======================================================================================
-
-When the phases are done the orchestrator evaluates the results and synthesizes the reply:
-
-    - it flags any partial failure (something that could not be done, and why);
-    - it redacts internal data: cash, margins and supplier cost never reach the customer.
-
-It returns the result and the failures to the CustomerSupportAgent as one response, and the
-CustomerSupportAgent sends it to the customer.
-
-The reply therefore contains only what the customer needs: what was found, what it costs,
-what was ordered and when it will arrive, and what could not be done.
-
-
-======================================================================================
-11. BACKGROUND REPLENISHMENT
-======================================================================================
-
-Replenishment keeps the warehouse stocked. It is deliberately separated from the customer's
-request.
-
-    Rules:
-        - it runs off the request path;
-        - it never affects the customer's outcome;
-        - it is started by the orchestrator asynchronously (fire and forget), triggered by a
-          request.
-
-    Steps:
-        R1. The InventoryAgent reads the full inventory (get_all_inventory), including open
-           stock orders.
-        R2. It finds the items below their reorder point, counting stock already on order.
-        R3. If any item is below its reorder point:
-               a. it asks the supplier for a delivery date (an ETA or a timeout);
-               b. it reads the cash balance;
-               c. cash gate. Either:
-                      - cash covers the cost and stays above the cash floor: the stock
-                        purchase is recorded with the key "item + reorder cycle"; or
-                      - cash is insufficient, or the supplier is unavailable: the restock
-                        is skipped and flagged for ops review.
-        R4. It reports the outcome back asynchronously. The report is logged and is never
-           shown to the customer.
-
-    The key "item + reorder cycle" means the same item is not bought twice in one cycle, and
-    it matches the item(s) restock so that the two paths do not buy the same stock.
-
-Why separate it: a customer's reply must not wait for, or depend on, the supplier or the
-warehouse's own needs. A shortfall for the current order is handled in line (section 9.1);
-routine top-ups happen here.
-
-
-======================================================================================
-12. FAILURE HANDLING AS DESIGNED
-======================================================================================
-
-    What fails                          What the design does
-    ----------------------------------  ---------------------------------------------------
-    A database or supplier call         Timeout and bounded retry. Reads retry freely; writes
-                                        retry only with the same idempotency key.
-    Supplier unavailable (Phase 1)      Partial result: stock levels with the ETA unknown.
-                                        Items that are in stock are unaffected; a shortfall
-                                        cannot be promised.
-    Inventory read fails (Phase 1)      Error with a reason. Pricing is not attempted: "cannot
-                                        price safely"; the quote is reported unavailable.
-    Quote history fails (Phase 1)       Error with a reason, reported. It is not a stock
-                                        failure and does not by itself block pricing.
-    Pricing fails (Phase 2)             Error with a reason. The order cannot proceed.
-    Cash would fall below the floor     Restock denied with a reason; the order is skipped.
-    A write fails                       Restock denied or order error, with a reason.
-    Stock changed before the sale       The atomic sale is refused; error with a reason.
-    Order not fulfillable               Skipped, reported, no side effects.
-    Background restock cannot proceed   Skipped and flagged for ops review. The customer is
-                                        never affected.
-    Loop cap reached                    Escalate to a human agent.
-
-Principle: every failure produces either a retry that is safe, or a reported reason. A
-failure never becomes a silent side effect.
-
-
-======================================================================================
-13. WHAT THE DESIGN GUARANTEES
-======================================================================================
-
-These follow from the structure of the diagram.
-
-    G1.  Nothing is written until the reads are done and a gate allows it. Writes appear only
-         in Phase 3 and in the background replenishment.
-    G2.  Parallel work is limited to independent reads, so parallelism cannot cause harm.
-    G3.  Anything retried is safe to retry: a read, or a write with its idempotency key.
-    G4.  A sale cannot use stock that is not there: the stock is checked again at the moment of
-         sale, just before the write.
-    G5.  No purchase takes cash below the cash floor.
-    G6.  A quote is never produced without a known stock position, and it never goes below the
-         margin floor.
-    G7.  An order that has been placed is never placed again, however many iterations run.
-    G8.  The customer never sees cash, margins or supplier cost.
-    G9.  The background replenishment cannot change what a customer is told or charged.
-    G10. Every loop ends: by the customer's confirmation or by the iteration cap.
-    G11. A request that cannot be fulfilled leaves no trace in the books.
-
-
-======================================================================================
-14. EXTENSION POINTS
-======================================================================================
-
-The diagram marks three places where the system is meant to grow:
-
-    - more inventory tools    (Phase 1, on the InventoryAgent)
-    - more pricing tools      (Phase 2, on the QuoteAgent)
-    - more order tools        (Phase 3, on the OrderAgent)
-
-An extension must keep the rules of section 3: a timeout and bounded retry on every external
-call, an idempotency key on every write, no retry of a write without its key, and redaction
-before anything reaches the customer. A new read tool belongs in a read-only task; a new
-write tool belongs only in Phase 3 or the background replenishment, behind a gate.
-
-
-======================================================================================
-15. DRAWBACKS AND FUTURE IMPROVEMENTS
-======================================================================================
-
-These are the limits of the design as drawn, and how it could grow. Each improvement answers
-the drawback with the same number.
-
-15.1 DRAWBACKS
-
- D1. Quote and order are one step.
-     When a request is an Order, the price is worked out in Phase 2 and the sale is recorded
-     in Phase 3 in the same pass. The customer sees the price in the reply but never approves
-     it first. That keeps the exchange short, and it suits a request that already says "sell
-     me this". It is a weakness for large or heavily discounted orders, where the customer may
-     want to see the price before committing.
-
- D2. A placed order cannot be changed.
-     The design guarantees that a placed order is never placed again (rule R6), and it
-     escalates to a human when the loop cap is reached. It does not define amending or
-     cancelling an order. A follow-up that changes an order already placed has no automatic
-     path and can only be handled by a person. That is safe, but the experience is weakest
-     at the moment the customer has already committed.
-
- D3. Cash is one shared limit.
-     The item(s) restock and the background replenishment check the same cash floor, and the
-     design does not say which comes first. Routine replenishment, which follows every
-     request, can spend cash that a later customer's restock needs. Replenishment is also
-     triggered by requests, so a quiet period triggers none.
-
-15.2 FUTURE IMPROVEMENTS
-
- F1. A quote-acceptance step (answers D1).
-     For orders above a chosen size or discount, send the quotation first and place the order
-     in the next loop iteration, only after the customer confirms. The loop already exists
-     for follow-ups, so this adds one branch between Phase 2 and Phase 3, not a new
-     mechanism.
-
- F2. An order lifecycle with amend and cancel (answers D2).
-     Define the states an order passes through: quoted, confirmed, amended, cancelled,
-     delivered. Add amend and cancel as explicit paths, each with its own gate and its own
-     idempotency key, and give the human escalation a defined hand-off: a queue, and the
-     context the person needs.
-
- F3. Separate cash budgets, a schedule, and recorded quotes (answers D3).
-     Give customer-driven restocks and routine replenishment their own cash allowances, so
-     neither can starve the other, and run replenishment on a schedule as well as after
-     requests. Also record every issued quotation: that gives an audit trail and lets the
-     quote history grow. (The pricing step would then learn from its own earlier prices, so
-     discounts need a guard against drifting up or down over time.)
-
-
-======================================================================================
-16. GLOSSARY
-======================================================================================
-
-shortfall           units wanted minus units on hand
-ETA                 the supplier's estimated delivery date for the missing units
-delivery need       the date by which the customer needs the goods
-quote OK            a quotation exists and is acceptable for the order to proceed
-fulfillable         in stock, or a restock was placed for the shortfall
-cash floor          the minimum cash the company must keep after any purchase
-margin floor        the lowest price a discount may reach
-reorder point       the stock level below which routine replenishment buys more
-reorder cycle       one period of replenishment; one purchase per item per cycle
-idempotency key     a label that lets a repeated write be recognised, so it happens once
-gate                a condition that must hold before a side effect is allowed
-extension point     the place where a new tool attaches to an agent
-redact              remove internal figures before they reach the customer
+Source of truth: beavers_agents_detailed.mermaid (the sequence diagram). Sections 1 to 4 explain
+it in words, section 5 says why it was built this way, section 6 reports how it performed on
+the 20 sample requests (test_results.csv), and section 7 lists drawbacks and improvements.
+
+1. WHAT THE SYSTEM DOES
+-----------------------
+A customer sends an inventory question ("do you have this?"), a quote request ("what would this
+cost?") or an order ("sell me this"). Five agents work together to understand it, check stock,
+price it with a bulk discount, buy more stock when there is a shortfall and delivery can still
+be on time, record the sale, and reply. Separately, and without ever delaying a customer, the
+system keeps the warehouse stocked. An "item" means one product the customer wants, with its
+quantity ("500 cardstock").
+
+2. THE FIVE AGENTS
+------------------
+Each tool belongs to exactly one agent, so the responsibilities do not overlap. A task is only
+handed the tools it needs: a stock check never gets a tool that writes.
+
+CustomerSupportAgent  Understands the customer's words: maps products to the catalog, sorts the
+                      request (order / quote / inventory), runs the customer loop.
+                      lookup_catalog_item: catalog data only
+OrchestratorAgent     Plans, delegates, decides what may happen next, writes the reply.
+                      Plain code: no model and no tools.
+InventoryAgent        Stock, supplier delivery dates and buying stock. Never records sales.
+                      check_item_stock: get_stock_level, get_supplier_delivery_date
+                      restock_for_order, restock_for_replenishment: get_cash_balance,
+                        get_supplier_delivery_date, create_transaction
+                      find_low_stock: get_all_inventory
+QuoteAgent            Prices requests and applies discounts within limits. Never touches stock
+                      or sales.
+                      search_history: search_quote_history
+                      get_pricing_context: generate_financial_report
+                      price_line: pricing rules only
+OrderAgent            Records the sale. The only agent that writes sales.
+                      finalize_sale: create_transaction
+
+3. HOW A REQUEST FLOWS (the diagram, step by step)
+--------------------------------------------------
+The customer loop: the request goes to the CustomerSupportAgent, then to the orchestrator. The
+loop repeats for follow-ups until the customer is satisfied or 3 iterations have passed, then
+it escalates to a person. It carries the request id, the iteration and earlier results, and a
+placed order is never replaced.
+
+ 1. Plan. An order needs a stock check and a quote first, and a quote needs a stock check, so
+    the plan adds them even when the customer only asked to order.
+ 2. Phase 1, look-ups done at the same time. The InventoryAgent checks stock for each item and
+    asks the supplier for a delivery date (ETA) for any shortfall. The QuoteAgent looks up
+    similar past quotes. Neither needs the other and neither changes anything. If the
+    supplier does not answer, the ETA is "unknown" and in-stock items are unaffected.
+ 3. Phase 2, pricing. If stock is known, the QuoteAgent prices each item. It reads the sales
+    report (internal only) so that top sellers get smaller discounts, then applies a bulk
+    discount that never goes below the margin floor (cost plus 10%). If stock could not be
+    read the system does not guess: the quote is reported as unavailable.
+ 4. Phase 3, changes, only after a check. Only when an order was asked for. For each item:
+        in stock                                      ship
+        short, ETA in time, quote OK                  buy stock if cash stays above the cash
+                                                      floor, then ship
+        ETA too late or unknown, restock denied,      not placed, nothing changed, and the
+        or no quote                                   reason is given to the customer
+    The sale is recorded after the stock is checked again just before the write (it may have
+    changed since Phase 1), under a write lock.
+ 5. Reply. The orchestrator writes it from fixed templates and from results the tools stored.
+    It points out anything that could not be done, and why, and removes internal figures
+    (cash, margins, supplier cost).
+ 6. Background replenishment. After the reply has gone, the InventoryAgent finds items below
+    their reorder point and tops them up if cash allows; otherwise it skips the item and flags
+    it for a person to review. It can never change what the customer was told or charged.
+
+Rules everywhere: every database and supplier call has a time limit and a few retries. A
+look-up may be repeated freely. A change is repeated only with its idempotency key, a unique
+label built from the run, request, item and quantity, so a repeat is recognised and happens
+once. Every failure ends in a safe retry or a reported reason, never in a silent change.
+
+4. WHAT THE DESIGN GUARANTEES
+-----------------------------
+ - Nothing is changed until the look-ups are done and a check allows it.
+ - Anything retried is safe to retry, and a placed order is never placed again.
+ - A sale cannot use stock that is not there. No purchase, during an order or in the
+   background, takes cash below the cash floor. No price goes below the margin floor.
+ - The customer never sees cash, margins or supplier cost.
+ - Background replenishment cannot change what a customer is told or charged.
+ - Every loop ends, and a request that cannot be fulfilled leaves no trace in the books.
+
+5. WHY THE ARCHITECTURE LOOKS THIS WAY
+-------------------------------------
+The decisions follow from four questions asked of every step. Does it need language
+understanding (a model), or must it always hold (code)? Does it change the books (then it
+needs a check and must be safe to repeat)? Does the customer have to wait for it (if not, move
+it to the background)? Who needs which tools (give each task the least access)?
+
+ 1. Five specialised agents, not one agent with every tool. One agent that can price, buy stock
+    and record sales can make a wrong sale from a single wrong tool call. Splitting by
+    responsibility gives each task only the access it needs. Five is the project's limit, and
+    each role maps to a real job: understanding, coordinating, stock, price, sale.
+ 2. A deterministic orchestrator, not a model. The order of the work and the checks (stock,
+    deadline, cash) are rules, not judgments. As ordinary code they can be tested and cannot
+    be talked into a sale. Models are used only where language is needed: reading the message
+    and choosing tools and a discount within limits. The cost: it cannot adapt to a
+    situation nobody planned for.
+ 3. Guards in the tools, not in the prompts. A prompt is a request; code is a guarantee. The
+    cash reserve, the stock re-check, the discount cap and the margin floor are enforced in
+    code. If the sales report is unavailable, every discount cap is halved (fail closed).
+ 4. Look-ups in parallel, changes only after checks. The parallel steps change nothing, so
+    they save time without risk. The one phase that changes the books runs only after the
+    earlier phases succeeded.
+ 5. Every write is safe to repeat, so a retry or a repeated call never records a sale twice.
+ 6. Replenishment runs after the reply, so it can never delay a customer or change an outcome.
+ 7. Fixed templates for replies, so internal figures cannot leak and every refusal has a reason.
+
+How it was built and checked: smolagents (tool-calling agents, each tool a plain function) on
+gpt-4o-mini, over SQLite seeded from the starter files. All seven starter helpers are used
+inside tools (section 2). 71 automated tests use a scripted stand-in for the model, so they
+check the code around the model and not its judgment. Each guard was checked by deliberately
+breaking it and seeing a test fail. The real model is judged only by the evaluation below.
+
+6. EVALUATION RESULTS (test_results.csv)
+----------------------------------------
+All 20 requests in quote_requests_sample.csv were run in date order on a freshly seeded
+database. Each row holds the cash and inventory value after a request, and the customer's reply.
+
+    Requests processed                       20 of 20, none failed for a system reason
+    Items sold or quoted                     51: 38 confirmed, 13 not fulfilled
+    Partly fulfilled requests                6 (10, 14, 16, 17, 18, 19); request 15: nothing
+    Requests naming products we do not sell  8 (2, 3, 7, 8, 9, 15, 16, 20)
+    Cash changed after                       18 of 19 steps: $45,072.77 after request 1,
+                                             $46,228.17 after request 20
+    Confirmed order value                    $4,935.67 (restocking spends cash)
+
+This is a single run of a model that is not deterministic, so how much outcomes vary is not
+measured.
+
+Strengths
+ - It fulfils what it can and says what it cannot. Request 14: 500 cardstock confirmed with a
+   10% discount, while 5,000 A4 and 2,000 poster paper are refused with the earliest delivery
+   date (2025-04-16). Six requests went this way.
+ - An unknown product does not block the rest. Request 2 reports "200 balloons" as not sold
+   and still sells the poster paper and streamers (8 requests).
+ - Decisions are explained: 12 items show a bulk discount, 30 say there is none because the
+   item must be restocked, 20 say delivery includes restocking time, and all 13 refusals give
+   the reason and the earliest date.
+ - Safe replies: no cash, margins, supplier cost or error text, and no failed rows.
+ - Quantities are trustworthy: all 51 are numbers the customer wrote.
+ - No double sales even when the model repeats itself. In requests 5, 9, 11 and 18 the order
+   agent's model most likely called the sale tool twice. Each repeat was recognised and not
+   recorded again: each request's total equals the sum of its items, and in request 5 cash
+   rose by exactly $126.07, its $166.07 sale less $40.00 spent on stock.
+
+Two defects the evaluation found
+ - In an earlier run (not the submitted file) 11 of 53 items were wrong, although every count
+   passed. In requests 2, 4, 17 and 18 the model read "500 sheets" as 1 ream. Request 17 asked
+   for 1000 sheets of A4 and was sold "2 x A4 paper: $0.13". Fixed twice: the parsing prompt
+   now says sheets are already catalog units, and code sets aside any quantity that is not a
+   number the customer wrote and asks them to confirm it. On that run's data this flags
+   exactly the 11 wrong items and none of the other 42. Lesson: counting successes is not
+   checking correctness, and a model's arithmetic needs a check.
+ - In the submitted results, requests 5, 9, 11 and 18 say "CONFIRMED (already placed)" about
+   brand-new orders; the books are right. Most likely the model called the sale tool twice and
+   the repeat's record replaced the first (reproduced with a stand-in model). The code now
+   keeps the first confirmation on record, and real repeats are still reported.
+
+Weaknesses
+ - Product matching is loose and varies between runs. Details are dropped silently ("A4
+   glossy" sold as "A4 paper"; "A3 glossy" as "Glossy paper", though there is no A3). The
+   same words matched "Cardstock" ($0.15) in an earlier run and "250 gsm cardstock" ($0.30)
+   in the submitted one (request 18).
+ - Deadlines cause every refusal (13 items): the supplier is slower than the customer's date,
+   and the system offers no alternative.
+
+7. DRAWBACKS AND FUTURE IMPROVEMENTS
+-----------------------------------
+Three drawbacks, each answered by the improvement with the same number.
+
+ D1. Product matching is loose. The customer's words are matched to the nearest catalog item,
+     and details such as a size or "recycled" can be dropped without telling the customer.
+     The same words matched different items in different runs (section 6).
+ F1. Accountable matching: a catalog table with sizes, synonyms and units (packets, boxes,
+     reams). The reply names the product it matched and asks the customer to confirm
+     whenever a detail of the request was dropped.
+
+ D2. A missed deadline is only refused. When the supplier cannot deliver by the customer's
+     date, the system reports the earliest date but offers nothing else (13 of 51 items).
+ F2. Offer a way forward: ship what is in stock now, or offer the later date for acceptance,
+     so that most refusals become a choice for the customer.
+
+ D3. The customer has little control. Quote and order are one step, so a price is never
+     approved before the sale, and a placed order cannot be changed except by a person.
+ F3. A quote-acceptance step for large or heavily discounted orders (send the quotation first,
+     place the order in the next loop iteration, only after the customer confirms), and an
+     order lifecycle (quoted, confirmed, amended, cancelled, delivered) with amend and cancel
+     as guarded paths and a defined hand-off to a person.
+
+8. GLOSSARY
+-----------
+ cash floor        the cash the company must keep: no purchase may take cash below it
+ margin floor      the lowest price a discount may reach (cost plus 10%)
+ ETA               the supplier's estimated delivery date
+ reorder point     the stock level below which replenishment tops an item up
