@@ -42,11 +42,11 @@ python tests/test_pipeline.py            # run the tests (no API key needed)
 │   ├── config.py            policy knobs (discounts, cash reserve, retries) + load_env()
 │   ├── models.py            LineItem, ParsedRequest, RequestContext (the per-request ledger)
 │   ├── policy.py            pure functions: pricing policy, fulfilment gate, parsing/validation
-│   ├── database.py          CATALOG + atomic, idempotent writes + retry helper
+│   ├── database.py          CATALOG + once-only (idempotent) writes + retry helper
 │   └── starter_utils.py     the starter's utility functions (database setup, stock, cash, reports)
 ├── utils/logs.py            the project's logger (`from utils import logger`)
 ├── tests/
-│   ├── test_pipeline.py     the test suite (54 tests)
+│   ├── test_pipeline.py     the test suite (69 tests)
 │   └── shims/smolagents/    a scripted stand-in model, used only by the tests
 ├── quote_requests.csv       seed data for the database (quote history)
 ├── quotes.csv               seed data for the database (past quotes)
@@ -73,6 +73,22 @@ All five agents are in **`lib/agents.py`**. All their tools are in **`lib/tools.
 | Quote | `QuoteAgent` | yes | Looks up similar past quotes; prices each line with a bulk discount | `make_quote_history_tools` → `search_history`<br>`make_quote_pricing_tools` → `get_pricing_context`, `price_line` |
 | Order | `OrderAgent` | yes | Records the sale (the only agent that writes one) | `make_order_tools` → `finalize_sale` |
 
+### Tools and the starter helpers they use
+
+Every starter helper is used inside at least one tool (a test checks this).
+
+| Tool | Purpose | Starter helper(s) |
+|---|---|---|
+| `lookup_catalog_item` | map the customer's wording to catalog names | none (reads the catalog built from `paper_supplies`) |
+| `check_item_stock` | stock on hand for one item, and the supplier's delivery date for any shortfall | `get_stock_level`, `get_supplier_delivery_date` |
+| `restock_for_order` | buy the missing units so an approved order can ship | `get_cash_balance`, `get_supplier_delivery_date`, `create_transaction` |
+| `find_low_stock` | list items below their reorder point | `get_all_inventory` |
+| `restock_for_replenishment` | top up one low-stock item | `get_all_inventory`, `get_cash_balance`, `get_supplier_delivery_date`, `create_transaction` |
+| `search_history` | find similar past quotes | `search_quote_history` |
+| `get_pricing_context` | list prices and allowed discounts for the request | `generate_financial_report` |
+| `price_line` | price one item within the allowed discount | none (pure pricing policy) |
+| `finalize_sale` | record the sale | `create_transaction` |
+
 Also in `lib/agents.py`: `SpecialistAgent` (base class), `build_agent`, `run_agent`, `run_until_covered`,
 and `get_model()` (creates the model client on first use, so importing the package never needs a key).
 
@@ -84,13 +100,14 @@ and cannot write. Only `restock_for_order`, `restock_for_replenishment` and `fin
 Design diagrams: `beavers_agents_overview.mermaid` and `beavers_agents_detailed.mermaid`
 (rendered as `beavers_agent.jpg` and `beavers_agent_sequence_detailed.jpg`).
 
-### Overview Beavers Agent Diagram
 ![Overview](beavers_agent.jpg)
-### Detailed Beavers Agent Sequence Diagram
+
 ![Detailed sequence](beavers_agent_sequence_detailed.jpg)
 
 1. **Understand.** `CustomerSupportAgent.categorize` asks the LLM for a structured request. `policy.validate_parsed`
    checks every item against the catalog, so the model cannot invent products. Unknown items are reported back.
+   It also checks every quantity against the customer's own words: a quantity that is not a number the customer
+   wrote (a count of reams counts as 500 sheets each) is never sold. The customer is asked to confirm it instead.
    A deadline earlier than the request date is flagged and the customer is asked to confirm it, never guessed.
    If the model call itself fails, the customer is told there is a temporary problem on our side (never "could not
    match"), and nothing is ordered.
@@ -101,7 +118,7 @@ Design diagrams: `beavers_agents_overview.mermaid` and `beavers_agents_detailed.
    Lines that need restocking are never discounted, top sellers get half the cap, and a margin floor always holds.
 5. **Phase 3, side effects (gated).** If stock is short and the supplier can deliver before the deadline,
    `InventoryAgent.restock` buys the shortfall (never below the cash reserve). `OrderAgent.place_orders` then records
-   the sale with an atomic stock check. Blocked lines produce no writes at all.
+   the sale, checking the stock again just before the write. Blocked lines produce no writes at all.
 6. **Reply.** Built from a template, so cash balances, margins and supplier costs can never leak to a customer.
 7. **After the reply.** `InventoryAgent.replenish` tops up anything below its reorder point, off the request path.
 8. **Loop.** If the customer follows up, steps 1-6 repeat (at most `MAX_ITERATIONS` times, then it escalates to a human).
@@ -109,7 +126,7 @@ Design diagrams: `beavers_agents_overview.mermaid` and `beavers_agents_detailed.
    and the customer is told a colleague will help change it.
 
 What makes this safe to re-run: the Orchestrator never trusts the model's text, only the **ledger** that the tools
-fill in (`RequestContext`); every write carries an idempotency key, so retries and repeated requests cannot
+fill in (`RequestContext`); every write goes through the starter's `create_transaction` and carries an idempotency key, so retries and repeated requests cannot
 double-sell or double-buy.
 
 ## Running the agents
@@ -224,7 +241,7 @@ when the module loads, so changes made at runtime (and by the tests) would silen
 python tests/test_pipeline.py
 ```
 
-Expected last line: `54/54 passed`. The script prints `PASS`/`FAIL` for each test (a failure prints its full traceback)
+Expected last line: `69/69 passed`. The script prints `PASS`/`FAIL` for each test (a failure prints its full traceback)
 and exits with code 0 only if all pass. It is a plain script, not a pytest suite. A few `usage: ... error: --limit must be 1 or more` lines near the
 start are expected: one test deliberately passes bad flags and checks they are rejected.
 
@@ -236,7 +253,8 @@ start are expected: one test deliberately passes bad flags and checks they are r
   in-stock orders; shortfall → restock → sale → background top-up; a supplier date after the deadline; insufficient
   cash; repeated requests (no double-selling or double-buying); model failures and skipped tool calls; partial vs
   all-or-nothing orders; the customer loop bound and escalation; unknown products; replies never leaking internals;
-  least-privilege tool scoping; the database guards (atomic stock check, write-level replay, cash formula);
+  least-privilege tool scoping; the write guards (stock check at sale, once-only writes including crash recovery,
+  cash checks, cash formula); that every required starter helper is used inside a tool;
   the lazy model; the `--limit`/`--no-sleep`/`--resume` flags; a model failure being reported as a system problem
   (never as an unknown product); the run stopping after repeated failures while keeping the finished work; a follow-up
   that changes an item's quantity not selling it twice; discount caps halving when the financial report is down; and
