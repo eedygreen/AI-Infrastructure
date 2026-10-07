@@ -1,0 +1,176 @@
+
+sequenceDiagram
+    autonumber
+    participant Cust as CustomerSupportAgent
+    participant Orch as OrchestratorAgent
+    participant Ord as OrderAgent
+    participant Quote as QuoteAgent
+    participant Inv as InventoryAgent
+    participant DB as Database
+    participant Sup as Supplier (external)
+    actor Customer
+
+    %% ------------------------------------------------------------
+    %% Notation: ->> request (sync)   -->> response / return
+    %%           -) async, fire-and-forget (background work)
+    %% Every DB and Supplier call has a timeout + bounded retry.
+    %% Writes are never retried blindly: idempotency keys only.
+    %% Extension points mark where new tools attach to each agent.
+    %% ------------------------------------------------------------
+
+    Note over Cust: CustomerSupportAgent<br/>Understands the customer's words:<br/>maps products to the catalog, sorts the<br/>request (order / quote / inventory),<br/>runs the customer loop.<br/>Tool: lookup_catalog_item<br/>(catalog data only)
+    Note over Orch: OrchestratorAgent<br/>Plans, delegates, decides what<br/>may happen next, writes the reply.<br/>Plain code: no model, no tools.
+    Note over Ord: OrderAgent<br/>Records the sale. The only<br/>agent that writes sales.<br/>Tool: finalize_sale
+    Note over Quote: QuoteAgent<br/>Prices requests and applies discounts<br/>within the margin floor. Never<br/>touches stock or sales.<br/>Tools: search_history,<br/>get_pricing_context, price_line
+    Note over Inv: InventoryAgent<br/>Stock, supplier delivery dates and<br/>buying stock. Never records sales.<br/>Tools: check_item_stock, restock_for_order,<br/>find_low_stock, restock_for_replenishment
+
+    Customer->>+Cust: send request(s)
+    Note over Cust,Orch: Shared state across iterations:<br/>request_id, iteration, prior results<br/>(placed orders are never replaced)
+
+    loop Until customer satisfied OR iteration > MAX_ITERATIONS
+        Note over Cust: Identify requests <br/> then Categories <br/> Order <br/> Quote <br/>Inventory
+        Cust->>+Orch: delegate(requests, request_id, iterations)
+        Orch->>Orch: Plan: select agents and dependencies
+        Note over Orch: Order implies inventory and Quote<br/>as prerequisites. Plan adds them.
+
+        %% ---------- Phase 1: read-only, independent -> parallel ----------
+        Note over Customer,Sup: Phase 1 - independent reads, run in parallel
+        par Stock and delivery check (fanned out per line item)
+            opt Inventory needed
+                Orch->>+Inv: Inventory request(items)
+                Note over Orch,Inv: Timeout + bounded retry <br/>(safe: read-only)
+                Inv->>+DB: tool: check_item_stock<br/>[get_stock_level]<br/>on-hand stock for one item
+                DB-->>-Inv: stock per item
+                opt Shortfall on any item
+                    Inv->>+Sup: tool: check_item_stock<br/>[get_supplier_delivery_date]<br/>delivery date for the missing units
+                    Sup-->>-Inv: delivery ETA or timeout
+                end
+                Note right of Inv: extension point:<br/>more inventory tools
+                alt Success
+                    Inv-->>Orch: Stock levels + ETA for shortfalls
+                else Partial - supplier unavailable
+                    Inv-->>Orch: Stock levels, ETA, unknown
+                else Error or timeout after retries
+                    Inv-->>Orch: error(reason)
+                end
+                deactivate Inv
+            end
+        and Quote history prefetch (independent of stock)
+            opt Quote needed
+                Orch->>+Quote: History request (customer, items)
+                Note over Orch,Quote: Timeout + bounded retry<br/>(safe: read-only)
+                Quote->>+DB: tool: search_history<br/>[search_quote_history]<br/>similar past quotes
+                DB-->>-Quote: past quotes
+                alt Success
+                    Quote-->>Orch: Quote history
+                else Error or timeout after retries
+                    Quote-->>Orch: error(reason)
+                end
+                deactivate Quote
+            end
+        end
+
+
+        %% ----------Phase 2: pricing, needs Phase 1 ----------
+        Note over Customer,Sup: Phase 2 - pricing, depends on Phase 1 result
+        opt Quote needed
+            alt Stock levels known
+                Orch->>+Quote: Price request(stock, ETA, history)
+                Quote-->>+DB: tool: get_pricing_context<br/>[generate_financial_report]<br/>top sellers, which limit discounts
+                Note right of DB: internal only:<br/>never shown to the customer
+                DB-->>-Quote: top-selling products
+                Quote->>Quote: tool: price_line<br/>apply bulk discount within<br/>the margin floor
+                Note right of Quote: extension point:<br/>more pricing tools
+                alt Success
+                    Quote-->>Orch: Quotation(s)
+                else Error
+                    Quote-->>Orch: error(reason)
+                end
+                deactivate Quote
+            else Inventory failed
+                Note over Orch: Cannot price safely.<br/>Report quote unavailable
+            end
+        end
+
+        %% ----------Phase 3: side-effecting, gated ----------
+        rect rgb(255, 243, 230)
+            Note over Customer,Sup: Phase 3 - side effects, gated on Phase 1 and 2
+            opt Order requested
+                opt Shortfall AND ETA meets delivery need AND Quote OK
+                    Note over Orch,Inv: inline shortfall handling:<br/>guarded restock for THIS order
+                    Orch->>+Inv: Restock request(item, qty, key = restock + request_id)
+                    Inv->>+DB: tool: restock_for_order<br/>[get_cash_balance]<br/>cash before buying
+                    DB-->>-Inv: balance
+                    alt Cash covers cost, stays above cash floor
+                        Inv->>+DB: tool: restock_for_order<br/>[create_transaction: stock_orders]<br/>record the purchase
+                        DB-->>-Inv: restock confirmed
+                        Inv-->>Orch: Restock placed(ETA)
+                    else Insufficient cash or write failed
+                        Inv-->>Orch: Restock denied(reason)
+                    end
+                    deactivate Inv
+                end
+
+                alt Fulfillable: in stock, or restock placed
+                    Orch->>+Ord: Order request(delivery date, key = request_id + line)
+                    Ord->>+DB: tool: finalize_sale<br/>[create_transaction: sales]<br/>record the sale
+                    Note right of DB: Stock is checked again just<br/>before the write, under a write lock<br/>(stock may have changed<br/>since Phase 1)
+                    DB->>-Ord: transaction result
+                    Note right of Ord: extension point:<br/>more order tools
+                    alt Success
+                        Ord-->>Orch: Order status
+                    else Error, e.g stock changed
+                        Ord-->>Orch: error(reason)
+                    end
+                    deactivate Ord
+                else not Fulfillable: ETA too late or unknown,<br/>restock denied, or prerequisite failed
+                    Note over Orch: Skip Order.<br/>Report blocked order, no side effects
+                end
+            end
+        end
+
+
+        %% ---------- Synthesis and reply ----------
+        Orch->>Orch: Evaluate and Synthesize<br/>(flag partial failure, redact internal data(cash, margins, supplier cost))
+        Orch-->>-Cust: response(results, failures)
+        Cust-->>Customer: response
+
+        %% ---------- Background: routine replenishment, off request path ----------
+        rect rgb(238, 246, 255)
+            Note over Orch,Sup: Background - off the request path.<br/>Never affects the customer outcome.
+            Orch-)Inv: Replenishment scan(trigger == request_id)
+            activate Inv
+            Inv->>+DB: tool: find_low_stock<br/>[get_all_inventory]<br/>full inventory for the reorder scan
+            DB->>-Inv: full inventory (incl. open stock orders)
+            Inv-->>Inv: Find items below reorder point<br/>(net of open stock orders)
+            opt Any item below reorder point
+                Inv->>+Sup: tool: restock_for_replenishment<br/>[get_supplier_delivery_date]<br/>delivery date for the top-up
+                Sup-->>-Inv: delivery ETA or timeout
+                Inv->>+DB: tool: restock_for_replenishment<br/>[get_cash_balance]<br/>cash before buying
+                DB-->>-Inv: balance
+                alt Cash covers cost, stays above cash floor
+                    Inv->>+DB: tool: restock_for_replenishment<br/>[create_transaction: stock_orders]<br/>record the purchase
+                    Note right of DB: key = item + reorder cycle<br/>(dedupes with inline restock)
+                    DB-->>-Inv: restock confirmed
+                else Insufficient cash or supplier unavailable
+                    Note over Inv: Skip restock.<br/>Flag for ops review
+                end
+            end
+            Inv--)Orch: Replenishment report (logged, not customer-facing)
+            deactivate Inv
+        end
+
+        alt Customer satisfied
+            Customer->>Cust: confirm satisfied
+        else Follow-up needed
+            Customer->>Cust: follow-up request(s)
+        end
+    end
+
+    alt Customer confirmed
+        Cust-->>Customer: closing message
+    else MAX_ITERATIONS reached
+        Cust-->>Customer: escalate to human agent
+    end
+    deactivate Cust
+
