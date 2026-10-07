@@ -9,6 +9,7 @@ from workflow import run_test_scenarios
 
 
 def parse_args(argv=None):
+    """Read the command-line options and refuse values that make no sense."""
     parser = argparse.ArgumentParser(description="Run the Munder Difflin multi-agent test scenarios.")
     parser.add_argument("--limit", type=int, default=None, metavar="N",
                         help="process only the first N requests (by date); each request costs many model calls")
@@ -24,6 +25,7 @@ def parse_args(argv=None):
 
 
 def main(argv=None):
+    """Run the test scenarios with the options given on the command line."""
     args = parse_args(argv)
     config.load_env()
     return run_test_scenarios(limit=args.limit, no_sleep=args.no_sleep, resume=args.resume)
