@@ -40,7 +40,7 @@ class _Namespace:
     """One handle (`ps`) over the split modules, so the tests read as they did for the single file.
     Reads search the modules in order. Writes are allowed only for policy knobs and go to lib.config."""
     _ORDER = ["lib.agents", "lib.tools", "lib.policy", "lib.database", "lib.models", "lib.starter_utils",
-              "workflow", "lib.config"]
+              "lib.StateMachine", "workflow", "lib.config"]
 
     def __init__(self):
         object.__setattr__(self, "_mods", [importlib.import_module(m) for m in self._ORDER])
@@ -72,7 +72,7 @@ def fresh():
     h = smolagents.HOOKS
     h["fail"].clear(); h["skip"].clear(); h["calls"].clear(); h["delay"].clear(); h["discount"] = None
     h["last_task"].clear(); h["parse_garbage"] = False; h["parse_via_final_answer"] = False
-    h["parse_quantity_divisor"] = None
+    h["parse_quantity_divisor"] = None; h["duplicate_sale_calls"] = False
     ps.ALLOW_PARTIAL_FULFILLMENT = True
     RUN["n"] += 1
     orch = ps.OrchestratorAgent(f"run{RUN['n']}", ps.InventoryAgent(), ps.QuoteAgent(), ps.OrderAgent())
@@ -1132,6 +1132,91 @@ def no_one_letter_variable_names_in_our_code():
             if isinstance(node, ast.arg) and len(node.arg) == 1:
                 short.append(f"{os.path.basename(path)}:{node.lineno} {node.arg}")
     assert not short, f"one-letter names: {short}"
+
+
+@test
+def a_model_that_calls_the_sale_tool_twice_gets_one_sale_and_an_honest_reply():
+    """Real bug: the second call was recognised as a repeat (correct) but replaced the first record, so a new order was
+    reported as '(already placed)'."""
+    orch, csa = fresh()
+    item = stocked(10)[0]
+    smolagents.HOOKS["duplicate_sale_calls"] = True
+    try:
+        reply, ctx = go(csa, orch, f"I need 5 {item} by 2025-05-30")
+    finally:
+        smolagents.HOOKS["duplicate_sale_calls"] = False
+    assert len(rows(item, "sales")) == 1, "the repeated call must not record a second sale"
+    assert "CONFIRMED" in reply and "already placed" not in reply, reply
+    assert ctx.orders[item]["replayed"] is False, ctx.orders[item]
+
+
+@test
+def a_confirmed_order_is_never_replaced_by_a_repeat_or_a_failure():
+    ctx = ps.RequestContext(1, "2025-04-01", "t")
+    first = {"item_name": "A4 paper", "status": "confirmed", "replayed": False, "total": 5.0}
+    assert ctx.record_order("A4 paper", first) is first
+    repeat = {"item_name": "A4 paper", "status": "confirmed", "replayed": True, "total": 5.0}
+    assert ctx.record_order("A4 paper", repeat) is first                       # a repeat does not replace it
+    failure = {"item_name": "A4 paper", "status": "denied", "reason": "write failed"}
+    assert ctx.record_order("A4 paper", failure) is first                      # nor does a failure
+    earlier = {"item_name": "Cardstock", "status": "confirmed", "replayed": True, "total": 2.0}
+    assert ctx.record_order("Cardstock", earlier) is earlier                   # a repeat of an EARLIER request is still reported
+    ctx.record_order("Glossy paper", {"item_name": "Glossy paper", "status": "denied", "reason": "x"})
+    success = {"item_name": "Glossy paper", "status": "confirmed", "replayed": False, "total": 1.0}
+    assert ctx.record_order("Glossy paper", success) is success                # a failure can still be replaced by a success
+    ctx.record_order("Envelopes", {"item_name": "Envelopes", "status": "denied", "reason": "x"})
+    confirming_repeat = {"item_name": "Envelopes", "status": "confirmed", "replayed": True, "total": 1.0}
+    assert ctx.record_order("Envelopes", confirming_repeat) is confirming_repeat   # ... or by a repeat that confirms
+
+
+def _three_dates():
+    """A date-ordered request list, like the one the harness builds from quote_requests_sample.csv."""
+    return pd.DataFrame({"request_date": pd.to_datetime(["2025-04-01", "2025-04-02", "2025-04-03"])})
+
+
+@test
+def a_fresh_state_machine_saves_every_request_as_it_is_recorded():
+    if os.path.exists("test_results.csv"):
+        os.remove("test_results.csv")
+    state = ps.StateMachine(_three_dates())
+    assert state.run_id and state.results == [] and not state.is_finished(1)
+    state.update_books("2025-04-01")
+    state.record(1, "2025-04-01", "first reply", parse_failed=False)
+    saved = pd.read_csv("test_results.csv")
+    assert list(saved.columns) == ps.RESULT_COLUMNS and len(saved) == 1 and saved.response[0] == "first reply"
+    assert saved.cash_balance[0] == state.cash and saved.inventory_value[0] == state.inventory
+    state.update_books("2025-04-02")
+    state.record(2, "2025-04-02", "second reply", parse_failed=False)
+    assert len(pd.read_csv("test_results.csv")) == 2            # saved again straight away, not only at the end
+
+
+@test
+def the_state_machine_stops_after_enough_failures_in_a_row_and_a_success_resets_the_count():
+    state = ps.StateMachine(_three_dates())
+    limit = ps.MAX_CONSECUTIVE_PARSE_FAILURES
+    for number in range(1, limit):                              # one short of the limit
+        state.update_books("2025-04-01")
+        state.record(number, "2025-04-01", "temporary problem", parse_failed=True)
+    assert not state.must_stop()
+    state.update_books("2025-04-01")
+    state.record(limit, "2025-04-01", "fine", parse_failed=False)
+    assert state.parse_failures_in_a_row == 0 and not state.must_stop()      # a success resets the count
+    for number in range(limit + 1, 2 * limit + 1):
+        state.update_books("2025-04-01")
+        state.record(number, "2025-04-01", "temporary problem", parse_failed=True)
+    assert state.must_stop() and str(limit) in state.stop_message()
+
+
+@test
+def a_resumed_state_machine_carries_on_from_the_saved_rows():
+    first = ps.StateMachine(_three_dates())
+    for number, day in [(1, "2025-04-01"), (2, "2025-04-02")]:
+        first.update_books(day)
+        first.record(number, day, f"reply {number}", parse_failed=False)
+    again = ps.StateMachine(_three_dates(), resume=True)
+    assert again.run_id == first.run_id and again.finished_count == 2 and len(again.results) == 2
+    assert again.is_finished(2) and not again.is_finished(3)
+    assert again.cash == first.cash and again.inventory == first.inventory
 
 
 @test
