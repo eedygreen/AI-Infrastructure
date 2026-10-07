@@ -1,12 +1,13 @@
 DESIGN NOTES AND REFLECTION REPORT
 Beavers Paper Company (Munder Difflin): multi-agent ordering system
 
-Source of truth: beavers_agents_detailed.mermaid (the sequence diagram). Sections 1 to 4 explain
-it in words, section 5 says why it was built this way, section 6 reports how it performed on
-the 20 sample requests (test_results.csv), and section 7 lists drawbacks and improvements.
+This report has three parts: (1) the agent workflow diagram, beavers_agents_detailed.mermaid,
+explained in words, with the roles of the agents and the decisions behind the architecture;
+(2) the evaluation results in test_results.csv and the strengths they show; (3) drawbacks and
+suggested improvements.
 
-1. WHAT THE SYSTEM DOES
------------------------
+1. THE AGENT WORKFLOW DIAGRAM: THE ROLES AND THE DECISIONS BEHIND IT
+--------------------------------------------------------------------
 A customer sends an inventory question ("do you have this?"), a quote request ("what would this
 cost?") or an order ("sell me this"). Five agents work together to understand it, check stock,
 price it with a bulk discount, buy more stock when there is a shortfall and delivery can still
@@ -14,8 +15,8 @@ be on time, record the sale, and reply. Separately, and without ever delaying a 
 system keeps the warehouse stocked. An "item" means one product the customer wants, with its
 quantity ("500 cardstock").
 
-2. THE FIVE AGENTS
-------------------
+The five agents and their roles
+
 Each tool belongs to exactly one agent, so the responsibilities do not overlap. A task is only
 handed the tools it needs: a stock check never gets a tool that writes.
 
@@ -37,8 +38,8 @@ QuoteAgent            Prices requests and applies discounts within limits. Never
 OrderAgent            Records the sale. The only agent that writes sales.
                       finalize_sale: create_transaction
 
-3. HOW A REQUEST FLOWS (the diagram, step by step)
---------------------------------------------------
+How a request flows (the diagram, step by step)
+
 The customer loop: the request goes to the CustomerSupportAgent, then to the orchestrator. The
 loop repeats for follow-ups until the customer is satisfied or 3 iterations have passed, then
 it escalates to a person. It carries the request id, the iteration and earlier results, and a
@@ -57,7 +58,8 @@ placed order is never replaced.
  4. Phase 3, changes, only after a check. Only when an order was asked for. For each item:
         in stock                                      ship
         short, ETA in time, quote OK                  buy stock if cash stays above the cash
-                                                      floor, then ship
+                                                      floor (the minimum cash to keep), then
+                                                      ship
         ETA too late or unknown, restock denied,      not placed, nothing changed, and the
         or no quote                                   reason is given to the customer
     The sale is recorded after the stock is checked again just before the write (it may have
@@ -66,26 +68,17 @@ placed order is never replaced.
     It points out anything that could not be done, and why, and removes internal figures
     (cash, margins, supplier cost).
  6. Background replenishment. After the reply has gone, the InventoryAgent finds items below
-    their reorder point and tops them up if cash allows; otherwise it skips the item and flags
-    it for a person to review. It can never change what the customer was told or charged.
+    their reorder point (their minimum stock level) and tops them up if cash allows;
+    otherwise it skips the item and flags it for a person to review. It can never change what
+    the customer was told or charged.
 
 Rules everywhere: every database and supplier call has a time limit and a few retries. A
 look-up may be repeated freely. A change is repeated only with its idempotency key, a unique
 label built from the run, request, item and quantity, so a repeat is recognised and happens
 once. Every failure ends in a safe retry or a reported reason, never in a silent change.
 
-4. WHAT THE DESIGN GUARANTEES
------------------------------
- - Nothing is changed until the look-ups are done and a check allows it.
- - Anything retried is safe to retry, and a placed order is never placed again.
- - A sale cannot use stock that is not there. No purchase, during an order or in the
-   background, takes cash below the cash floor. No price goes below the margin floor.
- - The customer never sees cash, margins or supplier cost.
- - Background replenishment cannot change what a customer is told or charged.
- - Every loop ends, and a request that cannot be fulfilled leaves no trace in the books.
+Why the architecture looks this way
 
-5. WHY THE ARCHITECTURE LOOKS THIS WAY
--------------------------------------
 The decisions follow from four questions asked of every step. Does it need language
 understanding (a model), or must it always hold (code)? Does it change the books (then it
 needs a check and must be safe to repeat)? Does the customer have to wait for it (if not, move
@@ -101,7 +94,7 @@ it to the background)? Who needs which tools (give each task the least access)?
     and choosing tools and a discount within limits. The cost: it cannot adapt to a
     situation nobody planned for.
  3. Guards in the tools, not in the prompts. A prompt is a request; code is a guarantee. The
-    cash reserve, the stock re-check, the discount cap and the margin floor are enforced in
+    cash floor, the stock re-check, the discount cap and the margin floor are enforced in
     code. If the sales report is unavailable, every discount cap is halved (fail closed).
  4. Look-ups in parallel, changes only after checks. The parallel steps change nothing, so
     they save time without risk. The one phase that changes the books runs only after the
@@ -110,78 +103,49 @@ it to the background)? Who needs which tools (give each task the least access)?
  6. Replenishment runs after the reply, so it can never delay a customer or change an outcome.
  7. Fixed templates for replies, so internal figures cannot leak and every refusal has a reason.
 
-How it was built and checked: smolagents (tool-calling agents, each tool a plain function) on
-gpt-4o-mini, over SQLite seeded from the starter files. All seven starter helpers are used
-inside tools (section 2). 71 automated tests use a scripted stand-in for the model, so they
-check the code around the model and not its judgment. Each guard was checked by deliberately
-breaking it and seeing a test fail. The real model is judged only by the evaluation below.
-
-6. EVALUATION RESULTS (test_results.csv)
+2. EVALUATION RESULTS (test_results.csv)
 ----------------------------------------
 All 20 requests in quote_requests_sample.csv were run in date order on a freshly seeded
-database. Each row holds the cash and inventory value after a request, and the customer's reply.
+database. Each row holds the cash and inventory value after a request, and the reply.
 
-    Requests processed                       20 of 20, none failed for a system reason
-    Items sold or quoted                     51: 38 confirmed, 13 not fulfilled
-    Partly fulfilled requests                6 (10, 14, 16, 17, 18, 19); request 15: nothing
-    Requests naming products we do not sell  8 (2, 3, 7, 8, 9, 15, 16, 20)
-    Cash changed after                       18 of 19 steps: $45,072.77 after request 1,
-                                             $46,228.17 after request 20
-    Confirmed order value                    $4,935.67 (restocking spends cash)
+    Requests answered                        19 of 20 (request 15: the model call failed)
+    Items sold or quoted                     54: 44 confirmed, 10 not fulfilled
+    Requests naming products we do not sell  4 (2, 3, 13, 20)
+    Cash changed after                       18 of 19 steps: $45,139.97 after request 1,
+                                             $49,377.72 after request 20
+    Confirmed order value                    $18,817.72 (74% of it in request 3)
 
 This is a single run of a model that is not deterministic, so how much outcomes vary is not
-measured.
+measured. The strengths it shows:
 
-Strengths
- - It fulfils what it can and says what it cannot. Request 14: 500 cardstock confirmed with a
-   10% discount, while 5,000 A4 and 2,000 poster paper are refused with the earliest delivery
-   date (2025-04-16). Six requests went this way.
- - An unknown product does not block the rest. Request 2 reports "200 balloons" as not sold
-   and still sells the poster paper and streamers (8 requests).
- - Decisions are explained: 12 items show a bulk discount, 30 say there is none because the
-   item must be restocked, 20 say delivery includes restocking time, and all 13 refusals give
+ - It fulfils what it can and says what it cannot. Request 14: 500 cardstock is confirmed,
+   while 5,000 A4 and 2,000 poster paper are refused with the earliest delivery date
+   (2025-04-16). Six requests (10, 14, 16, 17, 18, 19) went this way.
+ - An unknown product does not block the rest. Request 20 reports "tickets" as not sold and
+   still sells the flyers and the poster paper.
+ - Decisions are explained: 17 items show a bulk discount, 36 say there is none because the
+   item must be restocked, 27 say delivery includes restocking time, and all 10 refusals give
    the reason and the earliest date.
- - Safe replies: no cash, margins, supplier cost or error text, and no failed rows.
- - Quantities are trustworthy: all 51 are numbers the customer wrote.
- - No double sales even when the model repeats itself. In requests 5, 9, 11 and 18 the order
-   agent's model most likely called the sale tool twice. Each repeat was recognised and not
-   recorded again: each request's total equals the sum of its items, and in request 5 cash
-   rose by exactly $126.07, its $166.07 sale less $40.00 spent on stock.
+ - Safe replies: no cash, margins, supplier cost or error text.
+ - It fails honestly. When the model call failed (request 15) the customer was told there was
+   a temporary problem, and nothing changed: cash and inventory match those after request 14.
 
-Two defects the evaluation found
- - In an earlier run (not the submitted file) 11 of 53 items were wrong, although every count
-   passed. In requests 2, 4, 17 and 18 the model read "500 sheets" as 1 ream. Request 17 asked
-   for 1000 sheets of A4 and was sold "2 x A4 paper: $0.13". Fixed twice: the parsing prompt
-   now says sheets are already catalog units, and code sets aside any quantity that is not a
-   number the customer wrote and asks them to confirm it. On that run's data this flags
-   exactly the 11 wrong items and none of the other 42. Lesson: counting successes is not
-   checking correctness, and a model's arithmetic needs a check.
- - In the submitted results, requests 5, 9, 11 and 18 say "CONFIRMED (already placed)" about
-   brand-new orders; the books are right. Most likely the model called the sale tool twice and
-   the repeat's record replaced the first (reproduced with a stand-in model). The code now
-   keeps the first confirmation on record, and real repeats are still reported.
-
-Weaknesses
- - Product matching is loose and varies between runs. Details are dropped silently ("A4
-   glossy" sold as "A4 paper"; "A3 glossy" as "Glossy paper", though there is no A3). The
-   same words matched "Cardstock" ($0.15) in an earlier run and "250 gsm cardstock" ($0.30)
-   in the submitted one (request 18).
- - Deadlines cause every refusal (13 items): the supplier is slower than the customer's date,
-   and the system offers no alternative.
-
-7. DRAWBACKS AND FUTURE IMPROVEMENTS
+3. DRAWBACKS AND FUTURE IMPROVEMENTS
 -----------------------------------
 Three drawbacks, each answered by the improvement with the same number.
 
- D1. Product matching is loose. The customer's words are matched to the nearest catalog item,
-     and details such as a size or "recycled" can be dropped without telling the customer.
-     The same words matched different items in different runs (section 6).
+ D1. Product matching is loose and can contradict itself. Requests 2, 3 and 13 say a product
+     could not be matched and then sell a different item in its place. Request 3 sold 15,000
+     A4: the 10,000 asked for plus the 5,000 A3 that the same reply says it could not match.
+     It also sold 250,000 sheets of standard copy paper ($13,000) for "500 reams of printer
+     paper", also reported as not matched. Sizes such as A3 are dropped silently.
  F1. Accountable matching: a catalog table with sizes, synonyms and units (packets, boxes,
-     reams). The reply names the product it matched and asks the customer to confirm
-     whenever a detail of the request was dropped.
+     reams). The reply names the product it matched, asks the customer to confirm whenever a
+     detail was dropped, never lists a product as both sold and unmatched, and checks the
+     merged total of an item, not only its parts.
 
  D2. A missed deadline is only refused. When the supplier cannot deliver by the customer's
-     date, the system reports the earliest date but offers nothing else (13 of 51 items).
+     date, the system reports the earliest date but offers nothing else (10 of 54 items).
  F2. Offer a way forward: ship what is in stock now, or offer the later date for acceptance,
      so that most refusals become a choice for the customer.
 
@@ -191,10 +155,3 @@ Three drawbacks, each answered by the improvement with the same number.
      place the order in the next loop iteration, only after the customer confirms), and an
      order lifecycle (quoted, confirmed, amended, cancelled, delivered) with amend and cancel
      as guarded paths and a defined hand-off to a person.
-
-8. GLOSSARY
------------
- cash floor        the cash the company must keep: no purchase may take cash below it
- margin floor      the lowest price a discount may reach (cost plus 10%)
- ETA               the supplier's estimated delivery date
- reorder point     the stock level below which replenishment tops an item up
