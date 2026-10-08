@@ -47,7 +47,7 @@ python tests/test_pipeline.py            # run the tests (no API key needed)
 │   └── starter_utils.py     the starter's utility functions (database setup, stock, cash, reports)
 ├── utils/logs.py            the project's logger (`from utils import logger`)
 ├── tests/
-│   ├── test_pipeline.py     the test suite (74 tests)
+│   ├── test_pipeline.py     the test suite (76 tests)
 │   └── shims/smolagents/    a scripted stand-in model, used only by the tests
 ├── quote_requests.csv       seed data for the database (quote history)
 ├── quotes.csv               seed data for the database (past quotes)
@@ -155,7 +155,12 @@ python main.py                    # or: python project_starter.py
 Each run **rebuilds** `munder_difflin.db` from the CSVs, so runs never affect each other (unless you pass `--resume`).
 Per request it prints the request, the cash balance and inventory value before and after, and the reply.
 `test_results.csv` is written after **every** request, so a run that stops or crashes keeps everything it finished.
-It has the columns `request_id, request_date, cash_balance, inventory_value, response`.
+It has the starter's five columns, `request_id, request_date, cash_balance, inventory_value, response`, followed by
+three audit columns that let a reviewer reconcile the money without reading the database:
+`order_total_confirmed` (what the customer was told was confirmed), `restock_cost` (spent buying stock for the order) and
+`background_replenishment_cost` (spent on routine replenishment after the reply). For every request after the first,
+the change in `cash_balance` equals `order_total_confirmed - restock_cost - background_replenishment_cost`;
+`python tools/check_results.py test_results.csv quote_requests_sample.csv` checks it.
 
 ### Resuming a stopped run
 
@@ -242,7 +247,7 @@ when the module loads, so changes made at runtime (and by the tests) would silen
 python tests/test_pipeline.py
 ```
 
-Expected last line: `74/74 passed`. The script prints `PASS`/`FAIL` for each test (a failure prints its full traceback)
+Expected last line: `76/76 passed`. The script prints `PASS`/`FAIL` for each test (a failure prints its full traceback)
 and exits with code 0 only if all pass. It is a plain script, not a pytest suite. A few `usage: ... error: --limit must be 1 or more` lines near the
 start are expected: one test deliberately passes bad flags and checks they are rejected.
 

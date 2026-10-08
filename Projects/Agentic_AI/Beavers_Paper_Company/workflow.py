@@ -75,6 +75,10 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resu
             parse_failed = False
         orchestrator.drain_background()     # test harness only: keep the books determinstic
 
+        # What this request moved, from its ledger (nothing if the request crashed before it had one)
+        ledger = getattr(customer_agent, "last_ctx", None)
+        audit_figures = ledger.audit_figures() if ledger is not None and ledger.request_id == request_number else {}
+
         # Update state
         state.update_books(request_date)
 
@@ -83,7 +87,7 @@ def run_test_scenarios(limit: Optional[int] = None, no_sleep: bool = False, resu
         logger.info(f"Updated Inventory: ${state.inventory:.2f}")
 
         # Save results (the state also counts the requests in a row the model could not understand)
-        state.record(request_number, request_date, response, parse_failed)
+        state.record(request_number, request_date, response, parse_failed, **audit_figures)
         if state.must_stop():
             raise SystemExit(state.stop_message())
         if not no_sleep:
