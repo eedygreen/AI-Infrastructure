@@ -649,7 +649,8 @@ def harness_stops_when_parsing_keeps_failing_but_not_after_a_recovery():
         assert smolagents.HOOKS["calls"].count("customer_support_agent:parse") == 2 * per_request   # requests 3 and 4 never started
         # the work finished before the stop is NOT lost: both requests are in the file, and no temporary file is left behind
         saved = pd.read_csv("test_results.csv")
-        assert list(saved.columns) == ["request_id", "request_date", "cash_balance", "inventory_value", "response"]
+        assert list(saved.columns)[:5] == ["request_id", "request_date", "cash_balance", "inventory_value", "response"]   # the starter's five, first
+        assert list(saved.columns)[5:] == ["order_total_confirmed", "restock_cost", "background_replenishment_cost"]      # then the audit columns
         assert list(saved.request_id) == [1, 2], saved
         assert not os.path.exists("test_results.csv.tmp")
     finally:
@@ -1185,9 +1186,13 @@ def a_fresh_state_machine_saves_every_request_as_it_is_recorded():
     saved = pd.read_csv("test_results.csv")
     assert list(saved.columns) == ps.RESULT_COLUMNS and len(saved) == 1 and saved.response[0] == "first reply"
     assert saved.cash_balance[0] == state.cash and saved.inventory_value[0] == state.inventory
+    assert saved.order_total_confirmed[0] == 0 and saved.restock_cost[0] == 0 and saved.background_replenishment_cost[0] == 0
     state.update_books("2025-04-02")
-    state.record(2, "2025-04-02", "second reply", parse_failed=False)
-    assert len(pd.read_csv("test_results.csv")) == 2            # saved again straight away, not only at the end
+    state.record(2, "2025-04-02", "second reply", parse_failed=False,
+                 order_total_confirmed=12.5, restock_cost=4.0, background_replenishment_cost=7.25)
+    saved = pd.read_csv("test_results.csv")
+    assert len(saved) == 2                                      # saved again straight away, not only at the end
+    assert (saved.order_total_confirmed[1], saved.restock_cost[1], saved.background_replenishment_cost[1]) == (12.5, 4.0, 7.25)
 
 
 @test
@@ -1217,6 +1222,49 @@ def a_resumed_state_machine_carries_on_from_the_saved_rows():
     assert again.run_id == first.run_id and again.finished_count == 2 and len(again.results) == 2
     assert again.is_finished(2) and not again.is_finished(3)
     assert again.cash == first.cash and again.inventory == first.inventory
+
+
+@test
+def the_ledger_adds_up_what_a_request_moved():
+    ctx = ps.RequestContext(1, "2025-04-01", "t")
+    ctx.orders["A4 paper"] = {"status": "confirmed", "total": 10.0}
+    ctx.orders["Cardstock"] = {"status": "confirmed", "total": 2.5}
+    ctx.orders["Glossy paper"] = {"status": "denied", "reason": "stock changed", "total": 99.0}   # a denied order still carries the quote's total: not counted
+    ctx.restocks["A4 paper"] = {"status": "placed", "cost": 4.0}
+    ctx.restocks["Cardstock"] = {"status": "denied", "cost": 99.0}                         # denied: no money moved
+    ctx.background.extend([{"status": "placed", "cost": 7.25}, {"status": "denied", "cost": 50.0}])
+    assert ctx.audit_figures() == {"order_total_confirmed": 12.5, "restock_cost": 4.0, "background_replenishment_cost": 7.25}
+    empty = ps.RequestContext(2, "2025-04-01", "t").audit_figures()
+    assert empty == {"order_total_confirmed": 0.0, "restock_cost": 0.0, "background_replenishment_cost": 0.0}
+
+
+@test
+def each_results_row_reconciles_with_the_cash_balance():
+    """The point of the audit columns: the change in cash = order total confirmed - restock cost - replenishment cost."""
+    fresh()
+    simple = [r for _, r in inv().iterrows() if r.item_name.replace(" ", "").isalnum()]
+    low = next(r for r in simple if stock(r.item_name, "2025-04-01") > int(r.min_stock_level))     # a sale can push it below its reorder point
+    short = next(r for r in simple if r.item_name != low.item_name)
+    to_reorder_point = stock(low.item_name, "2025-04-01") - int(low.min_stock_level) + 1
+    pd.DataFrame({
+        "request": [f"I need {to_reorder_point} {low.item_name} by 2025-05-30",                                   # sells down below the reorder point
+                    f"I need {stock(short.item_name, '2025-04-01') + 300} {short.item_name} by 2025-05-30",     # more than we have: restock for the order
+                    f"How much is 10 {low.item_name}?",                                                          # a quote: no sale, no restock
+                    "I need 5 unobtainium"],                                                                     # nothing we sell
+        "job": ["a", "b", "c", "d"], "event": ["w", "x", "y", "z"],
+        "request_date": ["04/01/25", "04/02/25", "04/03/25", "04/04/25"],
+    }).to_csv("quote_requests_sample.csv", index=False)
+    previous_cash = ps.generate_financial_report("2025-04-01")["cash_balance"]
+    results = pd.DataFrame(_quiet_run())
+    for _, row in results.iterrows():
+        change = round(row.cash_balance - previous_cash, 2)
+        explained = round(row.order_total_confirmed - row.restock_cost - row.background_replenishment_cost, 2)
+        assert abs(change - explained) < 0.01, (int(row.request_id), change, explained)
+        previous_cash = row.cash_balance
+    assert (results.order_total_confirmed > 0).any() and (results.restock_cost > 0).any(), results
+    assert (results.background_replenishment_cost > 0).any(), results                 # otherwise this test would prove too little
+    assert results.order_total_confirmed[2] == 0 and results.restock_cost[2] == 0     # the quote
+    assert results.order_total_confirmed[3] == 0 and results.restock_cost[3] == 0     # the request we cannot serve
 
 
 @test
@@ -1289,7 +1337,8 @@ def full_harness_runs_and_writes_results():
     finally: ps.time.sleep = old_sleep
     assert [r["request_id"] for r in out] == [1, 2, 3] and [r["request_date"] for r in out] == ["2025-04-01", "2025-04-02", "2025-04-03"]
     df = pd.read_csv("test_results.csv")
-    assert list(df.columns) == ["request_id", "request_date", "cash_balance", "inventory_value", "response"]
+    assert list(df.columns)[:5] == ["request_id", "request_date", "cash_balance", "inventory_value", "response"]   # the starter's five, first
+    assert list(df.columns)[5:] == ["order_total_confirmed", "restock_cost", "background_replenishment_cost"]      # then the audit columns
     assert "could not match" in df.response.iloc[1]
 
 

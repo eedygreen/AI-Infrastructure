@@ -74,7 +74,6 @@ class RequestContext:
 
     def record_order(self, item_name: str, order: dict) -> dict:
         """Store the order result for an item and return what is on record.
-
         A confirmation already on record is never replaced by a repeat of the same sale or by a failure. A model
         can call the sale tool twice for one item. The second call is recognised as a repeat and must not turn
         a new order into "already placed"."""
@@ -84,3 +83,13 @@ class RequestContext:
                 return current
             self.orders[item_name] = order
             return order
+
+    def audit_figures(self) -> dict:
+        """The money this request moved, for the audit columns of test_results.csv.
+        order_total_confirmed is what the customer was told was confirmed. restock_cost is what was spent buying
+        stock for the order. background_replenishment_cost is what routine replenishment spent after the reply."""
+        confirmed = sum(order["total"] for order in self.orders.values() if order["status"] == "confirmed")
+        restocked = sum(restock.get("cost", 0.0) for restock in self.restocks.values() if restock["status"] == "placed")
+        replenished = sum(restock.get("cost", 0.0) for restock in self.background if restock["status"] == "placed")
+        return {"order_total_confirmed": round(confirmed, 2), "restock_cost": round(restocked, 2),
+                "background_replenishment_cost": round(replenished, 2)}

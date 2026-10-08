@@ -84,7 +84,7 @@ def _place_restock(ctx: RequestContext, item_name: str, quantity: int,
         ctx.log(f"restock write failed for {item_name}: {exc}")
         return {"item_name": item_name, "quantity": quantity, "status": "denied", "reason": "write failed"}
     placed = outcome["status"] == "committed" or outcome.get("replayed")
-    return {"item_name": item_name, "quantity": quantity, "eta": eta,
+    return {"item_name": item_name, "quantity": quantity, "eta": eta, "cost": cost,
             "status": "placed" if placed else "denied", "reason": outcome.get("reason")}
 
 

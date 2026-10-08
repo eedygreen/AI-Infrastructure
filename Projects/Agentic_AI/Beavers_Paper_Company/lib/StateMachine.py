@@ -11,7 +11,8 @@ from lib.database import ensure_runtime_tables, load_run_id, save_run_id
 from lib.starter_utils import db_engine, generate_financial_report, init_database
 from utils import logger
 
-RESULT_COLUMNS = ["request_id", "request_date", "cash_balance", "inventory_value", "response"]
+RESULT_COLUMNS = ["request_id", "request_date", "cash_balance", "inventory_value", "response",
+                  "order_total_confirmed", "restock_cost", "background_replenishment_cost"]     # the last three: the audit columns
 CRASH_MESSAGE = "We could not process this request right now"      # the reply recorded when a request raises
 
 
@@ -105,10 +106,13 @@ class StateMachine:
         self.cash = report["cash_balance"]
         self.inventory = report["inventory_value"]
 
-    def record(self, request_number: int, request_date: str, response: str, parse_failed: bool) -> None:
+    def record(self, request_number: int, request_date: str, response: str, parse_failed: bool,
+               order_total_confirmed: float = 0.0, restock_cost: float = 0.0,
+               background_replenishment_cost: float = 0.0) -> None:
         """Add a finished request to the results, and save them at once.
-
-        Call update_books first, so the row carries the books after this request."""
+        Call update_books first, so the row carries the books after this request. The last three figures are the
+        audit columns: the change in cash since the previous row is order_total_confirmed minus restock_cost minus
+        background_replenishment_cost."""
         self.parse_failures_in_a_row = self.parse_failures_in_a_row + 1 if parse_failed else 0
         self.results.append(
             {
@@ -117,9 +121,12 @@ class StateMachine:
                 "cash_balance": self.cash,
                 "inventory_value": self.inventory,
                 "response": response,
+                "order_total_confirmed": order_total_confirmed,
+                "restock_cost": restock_cost,
+                "background_replenishment_cost": background_replenishment_cost,
             }
         )
-        self.save()                         # keep everything finished so far, even if the run stops or crashes next
+        self.save()                             # keep everything finished so far, even if the run stops or crashes next
 
     def save(self) -> None:
         """Write test_results.csv. Called after every request, so a stop or a crash keeps everything finished so far.
