@@ -20,12 +20,33 @@ from lib.tools import _low_stock_items, make_customer_support_tools, make_invent
 # Set up and load your env parameters and instantiate your model.
 @lru_cache(maxsize=1)
 def get_model():
-    """Create the model client on first use, so importing this package never needs an API key."""
-    return OpenAIServerModel(
-        model_id='gpt-4o-mini',
-        api_base='https://openai.vocareum.com/v1',
-        api_key=os.getenv('OPENAI_API_KEY'),
-    )
+    """Create the model client on first use, so importing this package never needs an API key.
+
+    `MODEL_PROVIDER` picks the backend (default "openai", so existing setups keep working
+    unchanged):
+    - "openai": `OpenAIServerModel` against any OpenAI-compatible endpoint. `MODEL_API_BASE`
+      also covers a *local* server speaking that protocol (Ollama, vLLM, LM Studio,
+      text-generation-webui), by pointing it at `http://localhost:<port>/v1`.
+    - "huggingface": `InferenceClientModel`, for Hugging Face's Inference Providers or a
+      local text-generation-inference endpoint, run with a locally hosted model such as
+      `meta-llama/Llama-2-70b-chat-hf`.
+
+    `MODEL_ID` overrides the model name for either provider.
+    """
+    provider = os.getenv('MODEL_PROVIDER', 'openai').lower()
+    if provider == 'huggingface':
+        from smolagents import InferenceClientModel
+        return InferenceClientModel(
+            model_id=os.getenv('MODEL_ID', 'meta-llama/Llama-2-70b-chat-hf'),
+            token=os.getenv('HF_TOKEN'),
+        )
+    if provider == 'openai':
+        return OpenAIServerModel(
+            model_id=os.getenv('MODEL_ID', 'gpt-4o-mini'),
+            api_base=os.getenv('MODEL_API_BASE', 'https://openai.vocareum.com/v1'),
+            api_key=os.getenv('OPENAI_API_KEY'),
+        )
+    raise ValueError(f"Unknown MODEL_PROVIDER: {provider!r} (expected 'openai' or 'huggingface')")
 
 
 
