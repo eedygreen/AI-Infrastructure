@@ -138,7 +138,24 @@ double-sell or double-buy.
   `sqlalchemy`, `python-dotenv` and `smolagents` (with the `openai` package, which `OpenAIServerModel` uses).
 - A `.env` file **in the project root** containing `OPENAI_API_KEY=...`. It is loaded by `main.py`, from the project
   root regardless of your current directory.
-- The three CSV files in the project root. The model name and endpoint are in `lib/agents.py` → `get_model()`.
+- The three CSV files in the project root. The model provider, name and endpoint are in `lib/agents.py` →
+  `get_model()`, and can be overridden with environment variables (see below) without touching the code.
+
+#### Choosing a model provider
+
+`get_model()` reads `MODEL_PROVIDER` (default `openai`, so existing setups keep working unchanged):
+
+| `MODEL_PROVIDER` | Backend | Relevant env vars |
+|---|---|---|
+| `openai` (default) | `OpenAIServerModel`, against any OpenAI-compatible endpoint. Also covers a **local** server speaking that protocol (Ollama, vLLM, LM Studio, text-generation-webui) by pointing `MODEL_API_BASE` at it | `MODEL_ID` (default `gpt-4o-mini`), `MODEL_API_BASE` (default the Vocareum endpoint), `OPENAI_API_KEY` |
+| `huggingface` | `InferenceClientModel`, for Hugging Face's Inference Providers or a **local** text-generation-inference endpoint running a model such as `meta-llama/Llama-2-70b-chat-hf` | `MODEL_ID` (default `meta-llama/Llama-2-70b-chat-hf`), `HF_TOKEN` |
+
+```bash
+# run fully locally against an Ollama server exposing the OpenAI-compatible API
+echo "MODEL_PROVIDER=openai" >> .env
+echo "MODEL_API_BASE=http://localhost:11434/v1" >> .env
+echo "MODEL_ID=llama3" >> .env
+```
 
 ### Run the whole sample
 
