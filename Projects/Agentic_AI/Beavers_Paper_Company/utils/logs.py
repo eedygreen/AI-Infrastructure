@@ -7,6 +7,7 @@ Date: 17/05/2026
 import logging
 import os, sys
 from datetime import datetime
+from lib.config import PROJECT_NAME
 
 
 
@@ -67,7 +68,7 @@ class Logger:
         
 
         # File format
-        log_file = f"logs/churn_library_{datetime.now().strftime('%Y%m%d')}.log"
+        log_file = f"logs/{PROJECT_NAME}_{datetime.now().strftime('%Y%m%d')}.log"
 
         # File handler: Add Debug logs to file
         file_handler = logging.FileHandler(log_file)
