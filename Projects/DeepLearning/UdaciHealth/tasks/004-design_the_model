@@ -1,0 +1,48 @@
+# Task: Design the Model
+
+## Goal
+The goal is to design a neural network architecture that balances expressiveness(ability to learn complex patterns) and efficiency (training speed and generalization to unseen data). The architecture should be a mulitlayer perceptron (MLP): a feedforward neural network that learns from health indicators to predict diabetes risk.
+
+
+## Context
+Architectural design choices:
+
+#### Input Layer:
+- **Size**:The number of neurons should match the number of features in the dataset (21 for the diabetes dataset).
+#### Hidden Layers:
+- **Depth**: Deeper networks can capture more complex patterns but increase the risk of overfitting and slow down training. 
+- **Width**: Choose enough neurons to represent the useful feature interactions without overcomplicating the model. 
+- **Activation Functions:** Non-linear activation functions (ReLU) should be used in hidden layers to introduce non-linearity and enable the network to learn complex patterns.
+
+#### Output Layer:
+- **Size**: Single neuron for binary classification (outputs probability of diabetes).
+- **Activation Function**: Sigmoid activation function to output a probability between 0 and 1.
+
+
+## Requirements
+1. Design a neural network architecture using PyTorch. Create a class `DiabetesClassifier(nn.Module)` that inherits from `torch.nn.Module`. 
+    - Implement the `__init__` method to define the layers. 
+    Within the constructor, specify the linear layers and activations.
+    - Implement the `forward()` method to define the forward pass of the network. Add non-linear activations between layers to help the network learn complex patterns.
+2. Create an instance of the `DiabetesClassifier` class and print the model summary to verify the architecture. Use `torchsummary` or `torchinfo` to display the model summary, including the number of parameters and layer configurations. set it to run on `device` is (CPU or GPU) based on availability.
+model = DiabetesClassifier().to(device)
+3. Ensure that the model is compatible with the preprocessed data from the previous task. The input size of the first layer should match the number of features in the dataset, and the output size of the last layer should be [0,1] for binary classification. The model should be able to accept batches of data with the shape `(batch_size, num_features)` and output predictions with the shape `(batch_size, 1)`.
+4. Test the forward pass with a sample batch. Retrieve one batch from your DataLoader and pass it through the model, after moving it to device. Check that the output tensor’s shape matches expectations (one probability per sample). This step validates the forward() method and layer dimensions are correct.
+
+
+## Constraints
+> - Add non-linear activations between layers to help the network learn complex patterns
+
+
+## Deliverables
+- [ ] **Model instantiated** without errors  
+- [ ] **Architecture matches expectations**: Input size = # features, hidden layers = right complexity for task, output = supports binary classification  
+- [ ] **Model moved to correct device** (GPU if available)  
+  
+If anything looks incorrect, revisit model definition before proceeding to training.
+
+## Report back
+- After completing the task, report back with the following:
+  - The parameters of the model.
+  - The Layer flow.
+  - Any questions or considerations for designing the neural network.
