@@ -32,6 +32,7 @@ model = DiabetesClassifier().to(device)
 
 ## Constraints
 > - Add non-linear activations between layers to help the network learn complex patterns
+- Do not use any regularization techniques (dropout, batch normalization, etc.) at this stage. The focus is on designing the architecture first.
 
 
 ## Deliverables
