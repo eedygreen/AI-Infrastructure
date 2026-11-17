@@ -2,17 +2,20 @@
 
 # Jupyter Notebook Instructions 
 
+
 In this exercise, I will review a fine-tuned language model, load it into a Jupyter Notebook, evaluate its outputs, and apply explainability techniques to assess potential bias. I use my findings to complete an Ethical Audit Report, a Comprehensive Mitigation Plan, and a presentation for the Ethics Committee to review. 
 
 ### **Step 1: Review the Model Card**
 
 Before downloading the model, take time to understand what I worked with.
 
+
 1. Review the **model card**, paying close attention to:  
    * The base model used  
    * How the model was fine-tuned  
    * The purpose and intended use of the model  
    * Known limitations and ethical considerations  
+
 2. This context will help you better understand the interpretation of the model’s behavior during testing and analysis.
 
 ### **Step 2: Set Up Environment**
@@ -20,12 +23,15 @@ Before downloading the model, take time to understand what I worked with.
 Jupyter-compatible environment.
 
 1. Launch Jupyter environment.  
+
 2. Open **JupyterLab**.
 
 ### **Step 3: Download the Starter Notebook**
 
 1. Download the provided notebook file from the course resources.  
+
 2. Upload the notebook to Jupyter environment.  
+
 3. Open the notebook and review its structure before running any cells.
 
 ### **Step 4: Install Required Libraries**
@@ -46,6 +52,7 @@ Restart the kernel if prompted.
 1. Run the cells that generate outputs using predefined prompts.  
 2. Review the generated text carefully.  
 3. Observe how the model responds to neutral, explicit, and role-based prompts.
+
 
 ### **Step 7: Create Test Prompts**
 
@@ -72,7 +79,9 @@ Review the resulting tables and outputs.
 
 ### **Step 10: Produce the Ethical Audit Report**
 
+
 Using my testing results and explainability outputs:
+
 
 1. Complete the **Ethical Audit Report**.  
 2. Include relevant tables directly from the notebook.  
@@ -80,9 +89,11 @@ Using my testing results and explainability outputs:
 
 # Ethical Audit Report 
 
+
 The Ethical Audit Report documents what I observed about the model’s behavior, risks, and limitations based on systematic testing and explainability analysis.
 
 This report focuses on evidence rather than solutions. I submited a completed Ethical Audit Report with:
+
 
 * Explainability tables embedded  
 * Clear references to notebook outputs  
@@ -92,12 +103,15 @@ This report focuses on evidence rather than solutions. I submited a completed Et
 
 The Comprehensive Mitigation Plan outlines how the risks identified in the Ethical Audit Report can be addressed prior to deployment.
 
+
 This document focuses on actions and safeguards rather than analysis. I submited a completed Comprehensive Mitigation Plan that:
+
 
 * Directly maps to risks identified in the Ethical Audit Report  
 * Focuses on actionable, realistic safeguards
 
 # Ethics Committee Presentation
+
 
 The Ethics Committee Presentation communicates my findings and recommendations to non-technical stakeholders responsible for oversight and approval.
 
@@ -113,6 +127,7 @@ Before submitting, confirm that I have:
 
 * Reviewed the model card
 * Successfully loaded the model into my Jupyter Notebook  
+
 * Generated outputs using predefined and custom prompts  
 * Conducted prompt sensitivity testing and counterfactual analysis  
 * Applied lexicon-based explainability techniques to analyze bias signals  
