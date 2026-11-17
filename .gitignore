@@ -6,3 +6,16 @@ venv
 Anaconda*
 *__pycache__
 
+
+# virtual environments
+.venv/
+venv/
+
+# datasets, checkpoints, model weights
+**/data/
+Cat_Dog_data/
+checkpoint-*/
+*.pt
+*.pth
+*.safetensors
+*.tar.gz
