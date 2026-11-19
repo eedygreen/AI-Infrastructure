@@ -38,13 +38,6 @@ def get_data_loaders(
     mean, std = compute_mean_and_std()
     print(f"Dataset mean: {mean}, std: {std}")
 
-    # YOUR CODE HERE:
-    # create 3 sets of data transforms: one for the training dataset,
-    # containing data augmentation, one for the validation dataset
-    # (without data augmentation) and one for the test set (again
-    # without augmentation)
-    # HINT: resize the image to 256 first, then crop them to 224, then add the
-    # appropriate transforms for that step
     data_transforms = {
         "train": transforms.Compose([
             transforms.Grayscale(num_output_channels=3),
