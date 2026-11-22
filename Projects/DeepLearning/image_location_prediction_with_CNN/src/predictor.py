@@ -31,9 +31,7 @@ class Predictor(nn.Module):
         with torch.no_grad():
             x = self.transforms(x)
             x = self.model(x)
-            m = nn.Softmax(dim=1)
-
-            return m(x)
+            return torch.softmax(x, dim=1)
 
 
 def predictor_test(test_dataloader, model_reloaded):
