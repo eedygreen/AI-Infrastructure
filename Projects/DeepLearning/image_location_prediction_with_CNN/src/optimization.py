@@ -9,7 +9,7 @@ def get_loss():
     optionally moving it to the GPU if use_cuda is set to True
     """
 
-    loss = nn.CrossEntropyLoss()
+    loss = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     return loss
 
