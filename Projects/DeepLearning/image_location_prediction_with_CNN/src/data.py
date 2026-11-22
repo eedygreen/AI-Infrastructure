@@ -40,10 +40,9 @@ def get_data_loaders(
 
     data_transforms = {
         "train": transforms.Compose([
-            transforms.Grayscale(num_output_channels=3),
             transforms.Resize(256),
-            transforms.RandomResizedCrop(224),
-            transforms.RandomRotation(30),
+            transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),
+            transforms.RandomRotation(15),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(mean, std)
