@@ -12,21 +12,24 @@ class MyModel(nn.Module):
 
         def conv_block(in_ch: int, out_ch: int) -> nn.Sequential:
             return nn.Sequential(
-                nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1, bias=False),
+                nn.Conv2d(in_ch, out_ch, kernel_size=3, stride=1, padding=1, bias=False),
                 nn.BatchNorm2d(out_ch),
                 nn.ReLU(inplace=True),
                 nn.MaxPool2d(2),
+                nn.Dropout2d(dropout),
             )
+
         self.features = nn.Sequential(
-            conv_block(3, 32),
+            nn.Conv2d(3, 16, kernel_size=3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            conv_block(16, 32),
             conv_block(32, 64),
             conv_block(64, 128),
             conv_block(128, 256),
             conv_block(256, 512),
         )
 
-        # Collapses 512 x 7 x 7 to 512 x 1 x 1, so the classifier stays small
-        # and doesn't depend on the exact input size
         self.pool = nn.AdaptiveAvgPool2d(1)
 
         self.classifier = nn.Sequential(
