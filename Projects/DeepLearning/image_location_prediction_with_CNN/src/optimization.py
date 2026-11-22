@@ -20,6 +20,7 @@ def get_optimizer(
     learning_rate: float = 0.01,
     momentum: float = 0.5,
     weight_decay: float = 0,
+    backbone_lr: float = None,
 ):
     """
     Returns an optimizer instance
@@ -29,10 +30,22 @@ def get_optimizer(
     :param learning_rate: the learning rate
     :param momentum: the momentum (if the optimizer uses it)
     :param weight_decay: regularization coefficient
+    :param backbone_lr: optional separate learning rate for the trainable
+                        non-'fc' parameters (for example 'layer4')
     """
+    trainable = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
+
+    if backbone_lr is None:
+        params = [p for _, o in trainable]
+    else:
+        params = [
+            {"params": [p for n, p in trainable if not n.startswith("fc")], "lr": backbone_lr},
+            {"params": [p for n, p in trainable if n.startswith("fc")], "lr": learning_rate},
+        ]
+
     if optimizer.lower() == "sgd":
         opt = torch.optim.SGD(
-            model.parameters(),
+            params,
             lr=learning_rate,
             momentum=momentum,
             weight_decay=weight_decay,
@@ -40,7 +53,7 @@ def get_optimizer(
 
     elif optimizer.lower() == "adam":
         opt = torch.optim.Adam(
-            model.parameters(),
+            params,
             lr=learning_rate,
             weight_decay=weight_decay
         )
