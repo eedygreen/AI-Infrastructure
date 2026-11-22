@@ -88,7 +88,8 @@ def valid_one_epoch(valid_dataloader, model, loss):
     return valid_loss
 
 
-def optimize(data_loaders, model, optimizer, loss, n_epochs, save_path, interactive_tracking=False):
+def optimize(data_loaders, model, optimizer, loss, n_epochs, save_path,
+            interactive_tracking=False, early_stopping_patience=None):
     # initialize tracker for minimum validation loss
     if interactive_tracking:
         liveloss = PlotLosses(outputs=[MatplotlibPlot(after_subplot=after_subplot)])
@@ -96,12 +97,9 @@ def optimize(data_loaders, model, optimizer, loss, n_epochs, save_path, interact
         liveloss = None
 
     valid_loss_min = None
+    epochs_without_improvement = 0
     logs = {}
 
-    # Learning rate scheduler: setup a learning rate scheduler that
-    # reduces the learning rate when the validation loss reaches a
-    # plateau
-    # HINT: look here: https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
     scheduler  = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=3)
 
     for epoch in range(1, n_epochs + 1):
@@ -129,6 +127,9 @@ def optimize(data_loaders, model, optimizer, loss, n_epochs, save_path, interact
             torch.save(model.state_dict(), save_path)
 
             valid_loss_min = valid_loss
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
 
         # Update learning rate, i.e., make a step in the learning rate scheduler
         scheduler.step(valid_loss)
@@ -142,6 +143,11 @@ def optimize(data_loaders, model, optimizer, loss, n_epochs, save_path, interact
             liveloss.update(logs)
             liveloss.send()
 
+        if (early_stopping_patience is not None
+            and epochs_without_improvement >= early_stopping_patience):
+            print(f"Early stopping at epoch {epoch}: no improvment "
+                  f"for {early_stopping_patience} epcohs.")
+            break
 
 def one_epoch_test(test_dataloader, model, loss):
     # monitor test loss and accuracy
