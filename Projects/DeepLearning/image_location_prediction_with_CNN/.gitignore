@@ -1,0 +1,5 @@
+/landmark_images/*
+/checkpoints/*
+/.pytest_cache/*
+/src/__pycache__/*
+.venv
