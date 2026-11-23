@@ -137,8 +137,7 @@ def visualize_one_batch(data_loaders, max_n: int = 5):
     """
     # obtain one batch of training images
     # First obtain an iterator from the train dataloader
-    dataiter = get_data_loaders()
-    train_data = dataiter["train"]
+    train_data = data_loaders["train"]
     images, labels = next(iter(train_data))
 
     # Undo the normalization (for visualization purposes)
