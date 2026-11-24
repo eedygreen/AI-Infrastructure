@@ -1,0 +1,31 @@
+id,question,prediction,ground_truth,f1_score,is_impossible,error_type
+56e17e6ee3433e1400422f80,What is one example of an instance that the quantitative answer to the traveling salesman problem fails to answer?,asking for a round trip through all sites in Milan,round trip through all sites in Milan,0.8750000000000001,False,partial_answer
+5ad3c626604f3c001a3ff012,What was one of the Norman's major imports?,fighting horsemen,,0.0,True,unanswerable_error
+5ad3a266604f3c001a3fea27,What type of major impact did the Norman dynasty have on modern Europe?,"political, cultural and military",,0.0,True,unanswerable_error
+5ad3f4b1604f3c001a3ff951,When did King Harold II conquer England?,1066,,0.0,True,unanswerable_error
+56de15dbcffd8e1900b4b5c9,Who was Emma's brother?,Duke Richard II of Normandy,Duke Richard II,0.7499999999999999,False,partial_answer
+5ad3ee2d604f3c001a3ff7e3,Who was Bohemond's son?,Robert,,0.0,True,unanswerable_error
+5ad3de8b604f3c001a3ff467,Who was the first Byzantine mercenary to serve with the Normans?,Hervé,,0.0,True,unanswerable_error
+5ad3af11604f3c001a3fec65,What language replaced the Gallo-Romance language?,Norman,,0.0,True,unanswerable_error
+5ad5316b5b96ef001a10ab72,What is computational complexity principle?,inherent difficulty,,0.0,True,unanswerable_error
+5ad3ae14604f3c001a3fec3a,What Viking groups were conquered by Rollo?,"Danes, Norwegians, Norse–Gaels",,0.0,True,unanswerable_error
+56e17644e3433e1400422f41,What field of computer science analyzes the resource requirements of a specific algorithm isolated unto itself within a given problem?,computability theory,analysis of algorithms,0.0,False,wrong_span
+56de49a8cffd8e1900b4b7a7,Who became the King of the Canary Islands?,Jean's nephew Maciot de Bethencourt,Bethencourt,0.33333333333333337,False,partial_answer
+5ad3a266604f3c001a3fea29,Who assimilted the Roman language?,Richard I,,0.0,True,unanswerable_error
+5ad3a266604f3c001a3fea28,Who was famed for their Christian spirit?,The Normans,,0.0,True,unanswerable_error
+56dde27d9a695914005b9651,What was the Norman religion?,Norse,Catholicism,0.0,False,wrong_span
+5ad3ee2d604f3c001a3ff7e1,Who did the Normans besiege in the 11th century?,Dyrrachium,,0.0,True,unanswerable_error
+5ad3f028604f3c001a3ff824,Who betrayed the Normans?,high Byzantine officials,,0.0,True,unanswerable_error
+5ad3fe91604f3c001a3ffc48,Who commissioned Danish vikings to create the Bayeux Tapestry?,Odo,,0.0,True,unanswerable_error
+56e17e6ee3433e1400422f81,What does computational complexity theory most specifically seek to answer? ,particular problem instances,computational problems,0.0,False,wrong_span
+5ad5316b5b96ef001a10ab76,What is a manual application of mathematical steps?,an algorithm,,0.0,True,unanswerable_error
+5ad3ed26604f3c001a3ff799,Who ultimatly drove the Byzantines out of Europe?,Robert,,0.0,True,unanswerable_error
+5ad5364c5b96ef001a10ab90,What can be viewed as a limited collection of instances together with a solution for every instance?,computational problem,,0.0,True,unanswerable_error
+5ad40419604f3c001a3ffdb8,What Islands are of the coast of Asia?,"Lanzarote, Fuerteventura and El Hierro",,0.0,True,unanswerable_error
+5ad3ee2d604f3c001a3ff7e2,Who did Robert lead agains Dyrrachium in 1107?,Normans,,0.0,True,unanswerable_error
+5ad40358604f3c001a3ffd7f,What was authored in the 12th century?,the Grand coutumier de Normandie,,0.0,True,unanswerable_error
+5ad3f4b1604f3c001a3ff952,What battle took place in the 10th century?,Battle of Hastings,,0.0,True,unanswerable_error
+5ad39d53604f3c001a3fe8d1,Who gave their name to Normandy in the 1000's and 1100's,10th and 11th centuries,,0.0,True,unanswerable_error
+5ad3e96b604f3c001a3ff689,Who joined Norman forces in the destruction of the Armenians?,Normans joined Turkish forces,,0.0,True,unanswerable_error
+5ad5344b5b96ef001a10ab89,What is the process that asks a more specific question about all possible algorithms that could not be used to solve the same problem?,appropriately restricted resources,,0.0,True,unanswerable_error
+5ad3f8d2604f3c001a3ffa8e,What did Sybilla of Normandy introduce to Scotland?,Normans and Norman culture,,0.0,True,unanswerable_error
