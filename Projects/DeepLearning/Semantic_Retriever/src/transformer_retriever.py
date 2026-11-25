@@ -48,8 +48,12 @@ class TransformerRetriever:
         # Encode query texts using the transformer model
         query_embeddings = self.model.encode(query_texts)
         
-        # YOUR CODE HERE: Calculate similarities and retrieve top-k documents
-        results = {}
-        
+        # Cosine similarity matrix of shape (n_queries, n_docs)
+        similarities = cosine_similarity(query_embeddings, self.corpus_embeddings)
+
+        # Indices of the k highest-scoring documents per query, best first
+        top_k_indices = np.argsort(-similarities, axis=1)[:, :k]
+        results = {q_idx: top_k_indices[q_idx].tolist() for q_idx in range(len(query_texts))}
+
         print(f"✅ Retrieved top-{k} documents using semantic similarity")
         return results
