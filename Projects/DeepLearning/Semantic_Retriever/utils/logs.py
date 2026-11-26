@@ -67,7 +67,7 @@ class Logger:
         
 
         # File format
-        log_file = f"logs/churn_library_{datetime.now().strftime('%Y%m%d')}.log"
+        log_file = f"logs/semantic_retriever_{datetime.now().strftime('%Y%m%d')}.log"
 
         # File handler: Add Debug logs to file
         file_handler = logging.FileHandler(log_file)

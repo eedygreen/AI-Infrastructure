@@ -8,18 +8,21 @@ This package contains the core modules for building a semantic retrieval system:
 - evaluator: Evaluate retrieval performance
 """
 
-from .data_loader import DataLoader
-from .embedding_generator import EmbeddingGenerator, RECOMMENDED_MODELS
-from .retriever import SemanticRetriever
-from .evaluator import RetrievalEvaluator
+from src.data_loader import DataLoader
+from src.bm25_retriever import BM25Retriever
+from src.transformer_retriever import TransformerRetriever
+from src.evaluator import IRMetrics
+from src.word2vec_retriever import Word2VecRetriever
+from src.utils import *
 
 __version__ = "1.0.0"
-__author__ = "Udacity Deep Learning Nanodegree"
+__author__ = "I.Idris"
 
 __all__ = [
     "DataLoader",
-    "EmbeddingGenerator", 
-    "SemanticRetriever",
-    "RetrievalEvaluator",
-    "RECOMMENDED_MODELS"
+    "BM25Retriever", 
+    "TransformerRetriever",
+    "IRMetrics",
+    "Word2VecRetriever",
+    "*",
 ]

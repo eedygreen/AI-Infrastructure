@@ -10,12 +10,12 @@ from utils import logger
 
 # BEIR imports
 from beir import util
-from beir.datasets.data_loader import GenericDataLoader
+from beir.datasets.data_loader import GenericDataLoader, HFDataLoader
 
 
 def load_beir_dataset(dataset_name, split="test"):
     """
-    Load BeIR dataset using the official BEIR package.
+    Load BeIR dataset using the Hugging Face.
     
     Args:
         dataset_name (str): Dataset name (e.g., 'nq')
@@ -28,35 +28,25 @@ def load_beir_dataset(dataset_name, split="test"):
             - qrels: dict of {query_id: {doc_id: relevance_score}}
     """
     # Setup paths
-    url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset_name}.zip"
-    out_dir = os.path.join(pathlib.Path.cwd().parent, "dataset")  # Store in project/solution/dataset
-    data_path = os.path.join(out_dir, dataset_name)
-    zip_file = os.path.join(out_dir, f"{dataset_name}.zip")
-    
-    # Check if dataset already exists
-    if os.path.exists(data_path):
-        logger.info(f"Dataset {dataset_name} already exists at {data_path}, skipping download...")
-    elif os.path.exists(zip_file):
-        logger.info(f"Found existing zip file {zip_file}, extracting...")
-        # Create output directory if it doesn't exist
+    try:
+        logger.info(f"Loading {dataset_name} dataset from Hugging Face...")
+
+        out_dir = os.path.join(pathlib.Path.cwd().parent, "dataset")
         os.makedirs(out_dir, exist_ok=True)
-        data_path = util.download_and_unzip(url, out_dir)
-    else:
-        logger.info(f"Downloading {dataset_name} dataset...")
-        # Create output directory if it doesn't exist
-        os.makedirs(out_dir, exist_ok=True)
-        data_path = util.download_and_unzip(url, out_dir)
-    
-    # Load the data
-    logger.info(f"Loading {split} split...")
-    corpus, queries, qrels = GenericDataLoader(data_folder=data_path).load(split=split)
-    
-    return corpus, queries, qrels
+        os.environ["HF_DATASETS_CACHE"] = out_dir
+
+        # Load the data
+        logger.info(f"Loading {split} split...")
+        corpus, queries, qrels = HFDataLoader(hf_repo=f"BeIR/{dataset_name}").load(split=split)
+
+        return corpus, queries, qrels
+    except Exception as e:
+        logger.error(f"error loading dataset: {e}")
 
 
 def load_beir_nq(split="test"):
     """
-    Load BeIR/nq (Natural Questions) dataset using the official BEIR package.
+    Load BeIR/nq (Natural Questions) dataset using the Hugging Face.
     
     Args:
         split (str): 'train', 'dev', or 'test' (default: 'test')

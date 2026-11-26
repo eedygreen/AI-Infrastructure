@@ -5,6 +5,7 @@ import numpy as np
 from typing import List, Dict, Tuple
 from rank_bm25 import BM25Okapi
 from tqdm import tqdm
+from utils import logger
 
 
 class BM25Retriever:
@@ -25,7 +26,7 @@ class BM25Retriever:
         
     def build_index(self, corpus_texts: List[str]):
         """Build BM25 index from corpus texts."""
-        print("🔧 Building BM25 index...")
+        logger.info("🔧 Building BM25 index...")
         self.corpus = corpus_texts
         
         # Lowercase and whitespace-tokenize each document
@@ -34,14 +35,14 @@ class BM25Retriever:
         # BM25Okapi with the configured term-saturation and length-normalization params
         self.bm25 = BM25Okapi(tokenized_corpus, k1=self.k1, b=self.b)
         
-        print(f"✅ BM25 index built for {len(corpus_texts):,} documents")
+        logger.info(f"✅ BM25 index built for {len(corpus_texts):,} documents")
         
     def retrieve(self, query_texts: List[str], k: int = 20) -> Dict[int, List[int]]:
         """Retrieve top-k documents for each query."""
         if self.bm25 is None:
             raise ValueError("Index not built. Call build_index() first.")
             
-        print(f"🔍 Running BM25 retrieval for {len(query_texts)} queries...")
+        logger.info(f"🔍 Running BM25 retrieval for {len(query_texts)} queries...")
         results = {}
         
         for q_idx, query in enumerate(tqdm(query_texts, desc="Retrieving")):
@@ -56,5 +57,5 @@ class BM25Retriever:
             
             results[q_idx] = top_k_indices.tolist()
             
-        print(f"✅ Retrieved top-{k} documents for {len(query_texts)} queries")
+        logger.info(f"✅ Retrieved top-{k} documents for {len(query_texts)} queries")
         return results
