@@ -52,6 +52,12 @@ st.markdown("""
     padding: 15px;
     margin: 10px 0;
     background-color: #f9f9f9;
+    color: #000000;
+}
+
+.retrieval-box h4,
+.retrieval-box p {
+    color: #000000 !important;
 }
 
 .correct-retrieval {
