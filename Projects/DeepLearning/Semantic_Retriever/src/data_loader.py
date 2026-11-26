@@ -10,7 +10,7 @@ from utils import logger
 
 # BEIR imports
 from beir import util
-from beir.datasets.data_loader import GenericDataLoader, HFDataLoader
+from beir.datasets.data_loader_hf import HFDataLoader
 
 
 def load_beir_dataset(dataset_name, split="test"):
@@ -96,7 +96,7 @@ class DataLoader:
         """
         try:
             if self.dataset_name == "BeIR/nq":
-                logger.info(f"Loading BeIR/nq (Natural Questions) dataset using official BEIR package...")
+                logger.info(f"Loading BeIR/nq (Natural Questions) dataset using Hugging Face...")
                 corpus, queries, qrels = load_beir_nq(split=split)
                 
             else:
