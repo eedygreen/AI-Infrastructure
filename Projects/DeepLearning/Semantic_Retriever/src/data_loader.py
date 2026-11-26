@@ -43,6 +43,7 @@ def load_beir_dataset(dataset_name, split="test"):
         return corpus, queries, qrels
     except Exception as e:
         logger.error(f"error loading dataset: {e}")
+        raise
 
 
 def load_beir_nq(split="test"):
@@ -122,7 +123,7 @@ class DataLoader:
                 np.random.seed(random_seed)
                 
                 # Randomly sample query IDs
-                all_query_ids = list(queries)
+                all_query_ids = list(queries.keys())
                 sampled_query_ids = np.random.choice(all_query_ids, size=query_sample_size, replace=False).tolist()
                 
                 # Filter queries to sampled ones
@@ -136,7 +137,7 @@ class DataLoader:
                     if query_id in qrels:
                         sampled_qrels[query_id] = qrels[query_id]
                         # Collect all document IDs for this query
-                        needed_doc_ids.update(qrels[query_id])
+                        needed_doc_ids.update(qrels[query_id].keys())
                 
                 # Filter corpus to only needed documents (materialize just those rows)
                 original_corpus_size = len(corpus)
