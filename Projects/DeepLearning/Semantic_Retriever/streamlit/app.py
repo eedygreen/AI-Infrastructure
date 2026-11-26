@@ -17,15 +17,15 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Add the src directory to the path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+# Add the project root to the path so `from src import ...` and `from utils import logger` resolve
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Import our existing retrievers
 try:
-    from bm25_retriever import BM25Retriever
-    from transformer_retriever import TransformerRetriever
-    from word2vec_retriever import Word2VecRetriever
-    from evaluator import IRMetrics
+    from src import BM25Retriever
+    from src import TransformerRetriever
+    from src import Word2VecRetriever
+    from src import IRMetrics
 except ImportError as e:
     st.error(f"Error importing retrievers: {e}")
     st.error("Please ensure you're running this from the correct directory with access to the src folder.")
