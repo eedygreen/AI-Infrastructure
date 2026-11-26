@@ -6,14 +6,11 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 import os
 import pathlib
-import logging
+from utils import logger
 
 # BEIR imports
 from beir import util
 from beir.datasets.data_loader import GenericDataLoader
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 def load_beir_dataset(dataset_name, split="test"):
