@@ -37,7 +37,8 @@ def load_beir_dataset(dataset_name, split="test"):
 
         # Load the data
         logger.info(f"Loading {split} split...")
-        corpus, queries, qrels = HFDataLoader(hf_repo=f"BeIR/{dataset_name}").load(split=split)
+        loader = HFDataLoader(hf_repo=f"BeIR/{dataset_name}")
+        corpus, queries, qrels = loader.load(split=split)
 
         return corpus, queries, qrels
     except Exception as e:
@@ -60,9 +61,6 @@ def load_beir_nq(split="test"):
     return load_beir_dataset("nq", split)
 
 
-
-
-
 class DataLoader:
     """
     Handles loading and preprocessing of datasets for semantic retrieval using official BEIR package.
@@ -80,6 +78,14 @@ class DataLoader:
         self.queries_dict = None
         self.qrels_dict = None
         
+    @staticmethod
+    def _corpus_to_dict(corpus_ds) -> Dict[str, Dict[str, str]]:
+        """Convert a Hugging Face corpus Dataset to {doc_id: {'title', 'text'}}."""
+        return {
+            doc_id: {"title": title, "text": text}
+            for doc_id, title, text in zip(corpus_ds["id"], corpus_ds["title"], corpus_ds["text"])
+        }
+    
     def load_dataset(self, split: str = "test", query_sample_size: Optional[int] = 500, 
                     random_seed: int = 42) -> Dict:
         """
@@ -102,6 +108,12 @@ class DataLoader:
             else:
                 raise ValueError(f"Dataset {self.dataset_name} not supported. Supported dataset: 'BeIR/nq'")
             
+            # HFDataLoader returns corpus/queries as Hugging Face Datasets (rows with
+            # 'id', 'text', 'title'), not dicts. Queries are small, so convert them to
+            # {query_id: text}. The corpus (~2.7M docs for NQ) stays lazy until we know
+            # which documents are needed.
+            queries = dict(zip(queries["id"], queries["text"]))
+            
             # Intelligent sampling: sample queries and include all related documents
             if query_sample_size and len(queries) > query_sample_size:
                 logger.info(f"Sampling {query_sample_size} queries and their related documents...")
@@ -110,7 +122,7 @@ class DataLoader:
                 np.random.seed(random_seed)
                 
                 # Randomly sample query IDs
-                all_query_ids = list(queries.keys())
+                all_query_ids = list(queries)
                 sampled_query_ids = np.random.choice(all_query_ids, size=query_sample_size, replace=False).tolist()
                 
                 # Filter queries to sampled ones
@@ -124,17 +136,22 @@ class DataLoader:
                     if query_id in qrels:
                         sampled_qrels[query_id] = qrels[query_id]
                         # Collect all document IDs for this query
-                        needed_doc_ids.update(qrels[query_id].keys())
+                        needed_doc_ids.update(qrels[query_id])
                 
-                # Filter corpus to only needed documents
+                # Filter corpus to only needed documents (materialize just those rows)
                 original_corpus_size = len(corpus)
-                corpus = {doc_id: corpus[doc_id] for doc_id in needed_doc_ids if doc_id in corpus}
+                id_to_row = {doc_id: row for row, doc_id in enumerate(corpus["id"])}
+                needed_rows = sorted(id_to_row[d] for d in needed_doc_ids if d in id_to_row)
+                corpus = self._corpus_to_dict(corpus.select(needed_rows))
                 qrels = sampled_qrels
                 
                 logger.info(f"Smart sampling completed:")
                 logger.info(f"  - Sampled {len(queries):,} queries from {len(all_query_ids):,}")
                 logger.info(f"  - Included {len(corpus):,} related documents from {original_corpus_size:,}")
                 logger.info(f"  - Maintained all {len(qrels):,} query-document relationships")
+            
+            if not isinstance(corpus, dict):  # no sampling: use the full corpus
+                corpus = self._corpus_to_dict(corpus)
             
             self.corpus_dict = corpus
             self.queries_dict = queries
